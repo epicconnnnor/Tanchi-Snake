@@ -1,17 +1,45 @@
 package dev.connor.tanchi_snake.game;
 
 import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.Collections;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Deque;
 
 public class Snake {
+
+    private final String id;
+    private final Deque<Point> body;
+    private Direction direction;
+    private int level;
+    private int stunTicks;
+    private int foodEaten;
+
+    public Snake(String id, Point start, Direction direction) {
+        this.id = id;
+        this.direction = direction;
+        this.level = 1;
+        this.stunTicks = 0;
+        this.foodEaten = 0;
+        this.body = new ArrayDeque<>();
+        this.body.addFirst(start);
+    }
+
+    // --- accessors ---
+
+    public String id() {
+        return id;
+    }
+
     public Collection<Point> body() {
         return Collections.unmodifiableCollection(body);
     }
 
-    public String id() {
-        return id;
+    public Point head() {
+        return body.getFirst();
+    }
+
+    public int length() {
+        return body.size();
     }
 
     public Direction direction() {
@@ -26,33 +54,25 @@ public class Snake {
         return stunTicks;
     }
 
-    private final String id;
-    private final Deque<Point> body;
-    private Direction direction;
-    private int level;
-    private int stunTicks;
-
-    public Snake(String id, Point start, Direction direction) {
-        this.id = id;
-        this.direction = direction;
-        this.level = 1;
-        this.stunTicks = 0;
-        this.body = new ArrayDeque<>();
-        this.body.addFirst(start);
+    public int foodEaten() {
+        return foodEaten;
     }
 
-    public Point head() {
-        return body.getFirst();
-    }
-
-    public int length() {
-        return body.size();
-    }
+    // --- mutators ---
 
     public void move(boolean grow) {
         Point newHead = head().move(direction);
         body.addFirst(newHead);
         if (!grow) {
+            body.removeLast();
+        }
+    }
+
+    public void growTo(int targetLength) {
+        while (body.size() < targetLength) {
+            body.addLast(body.getLast());
+        }
+        while (body.size() > targetLength) {
             body.removeLast();
         }
     }
@@ -72,8 +92,16 @@ public class Snake {
     }
 
     public void tickStun() {
-        if (stunTicks > 0)
+        if (stunTicks > 0) {
             stunTicks--;
+        }
     }
 
+    public void eat() {
+        foodEaten++;
+    }
+
+    public void resetFoodEaten() {
+        foodEaten = 0;
+    }
 }

@@ -1,0 +1,30 @@
+package dev.connor.tanchi_snake.game;
+
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+class SnakeTest {
+
+    @Test
+    void movesForwardWithoutGrowing() {
+        Snake s = new Snake("a", new Point(5, 5), Direction.RIGHT);
+        s.move(false);
+        assertEquals(new Point(6, 5), s.head());
+        assertEquals(1, s.length());
+    }
+
+    @Test
+    void growsWhenToldTo() {
+        Snake s = new Snake("a", new Point(5, 5), Direction.RIGHT);
+        s.move(true);
+        assertEquals(2, s.length());
+    }
+
+    @Test
+    void ignoresReversal() {
+        Snake s = new Snake("a", new Point(5, 5), Direction.RIGHT);
+        s.setDirection(Direction.LEFT);
+        assertEquals(Direction.RIGHT, s.direction());
+    }
+
+}
