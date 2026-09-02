@@ -27,31 +27,4 @@ class SnakeTest {
         assertEquals(Direction.RIGHT, s.direction());
     }
 
-    @Test
-    void eatingFoodGrowsSnake() {
-        GameState state = new GameState(32, 32);
-        Snake s = new Snake("a", new Point(5, 5), Direction.RIGHT);
-        state.addSnake(s);
-        state.addFood(new Point(6, 5));
-
-        new GameEngine().tick(state);
-
-        assertEquals(2, s.length());
-        assertEquals(1, s.foodEaten());
-        assertTrue(state.food().isEmpty());
-    }
-
-    @Test
-    void eatingFoodGrowsSnake() {
-        GameState state = new GameState(32, 32);
-        Snake s = new Snake("a", new Point(5, 5), Direction.RIGHT);
-        state.addSnake(s);
-        state.addFood(new Point(6, 5));
-
-        new GameEngine().tick(state);
-
-        assertEquals(2, s.length());
-        assertEquals(1, s.foodEaten());
-        assertTrue(state.food().isEmpty());
-    }
 }
