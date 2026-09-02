@@ -37,6 +37,11 @@ public class GameEngine {
 
     public void tick(GameState state) {
 
+        // The round is over once somebody has won: the board stops here.
+        if (state.hasWinner()) {
+            return;
+        }
+
         // 1. Stun countdown. A stunned snake sits still this tick.
         for (Snake s : state.snakes()) {
             s.tickStun();
@@ -170,7 +175,10 @@ public class GameEngine {
             }
         }
 
-        replenishFood(state);
+        awardWin(state);
+        if (!state.hasWinner()) {
+            replenishFood(state);
+        }
         state.incrementTick();
     }
 
@@ -189,6 +197,25 @@ public class GameEngine {
         Snake s = new Snake(id, spot, direction);
         state.addSnake(s);
         return s;
+    }
+
+    /**
+     * Hands the round to the first snake to reach {@link #WIN_LEVEL}. Snakes
+     * that get there on the same tick are ranked by id, so a tie always
+     * resolves the same way instead of following map iteration order.
+     */
+    private void awardWin(GameState state) {
+        List<Snake> contenders = new ArrayList<>();
+        for (Snake s : state.snakes()) {
+            if (s.level() >= WIN_LEVEL) {
+                contenders.add(s);
+            }
+        }
+        if (contenders.isEmpty()) {
+            return;
+        }
+        contenders.sort(Comparator.comparing(Snake::id));
+        state.setWinner(contenders.get(0));
     }
 
     /** Tops the board back up to {@link #FOOD_ON_BOARD} pieces of food. */
