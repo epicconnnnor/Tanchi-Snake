@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -48,6 +49,8 @@ class WebSocketEndToEndTest {
         private final List<String> everything = new ArrayList<>();
         private final AtomicReference<Throwable> failure = new AtomicReference<>();
         private WebSocketSession session;
+        /** The stable id the server gave us; keys our snake on the board. */
+        private String playerId;
 
         @Override
         protected void handleTextMessage(WebSocketSession session, TextMessage message) {
@@ -134,29 +137,41 @@ class WebSocketEndToEndTest {
     /** Connects, creates a room, and returns the code the server assigned. */
     private String createRoom(Client client, String name) throws Exception {
         client.send("{\"type\":\"create\",\"name\":\"" + name + "\"}");
+        return codeFromJoined(client);
+    }
+
+    /** Joins an existing room as a newcomer. */
+    private String joinRoom(Client client, String code, String name) throws Exception {
+        client.send("{\"type\":\"join\",\"room\":\"" + code + "\",\"name\":\"" + name + "\"}");
+        return codeFromJoined(client);
+    }
+
+    /** Rejoins claiming a previously issued id, the way a returning client would. */
+    private String rejoinRoom(Client client, String code, String playerId) throws Exception {
+        client.send("{\"type\":\"join\",\"room\":\"" + code
+                + "\",\"you\":\"" + playerId + "\"}");
+        return codeFromJoined(client);
+    }
+
+    /** Reads the joined message, stashing the id the server handed out. */
+    private static String codeFromJoined(Client client) throws Exception {
         String joined = client.await(p -> p.contains("\"type\":\"joined\""));
         assertNotNull(joined, "no joined message came back");
-        return roomCodeOf(joined);
+        Map<?, ?> fields = JSON.readValue(joined, Map.class);
+        Object you = fields.get("you");
+        assertInstanceOf(String.class, you, "joined carried no player id: " + joined);
+        client.playerId = (String) you;
+        return (String) fields.get("room");
     }
 
-    private static String roomCodeOf(String joinedPayload) {
-        try {
-            return (String) JSON.readValue(joinedPayload, java.util.Map.class).get("room");
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private static SnakeMatch snakeNamed(StateMessage state, String name) {
+    /** Our own snake, found by id rather than by a name that need not be unique. */
+    private static StateMessage.SnakeView mySnake(StateMessage state, Client client) {
         for (StateMessage.SnakeView s : state.snakes()) {
-            if (name.equals(s.name())) {
-                return new SnakeMatch(s);
+            if (s.id().equals(client.playerId)) {
+                return s;
             }
         }
         return null;
-    }
-
-    private record SnakeMatch(StateMessage.SnakeView snake) {
     }
 
     // --- 1. connect and create ---
@@ -169,6 +184,8 @@ class WebSocketEndToEndTest {
             assertNotNull(code, "joined message carried no room code");
             assertEquals(RoomCodeGenerator.CODE_LENGTH, code.length());
             assertTrue(RoomCodeGenerator.isWellFormed(code), "bad code: " + code);
+            assertNotNull(host.playerId, "joined message carried no player id");
+            assertFalse(host.playerId.isBlank());
             assertNull(host.transportFailure());
         }
     }
@@ -180,8 +197,8 @@ class WebSocketEndToEndTest {
         try (Client host = connect(); Client guest = connect()) {
             String code = createRoom(host, "Ann");
 
-            guest.send("{\"type\":\"join\",\"room\":\"" + code + "\",\"name\":\"Bo\"}");
-            assertNotNull(guest.await(p -> p.contains("\"type\":\"joined\"")));
+            joinRoom(guest, code, "Bo");
+            assertNotEquals(host.playerId, guest.playerId, "ids must be per player");
 
             StateMessage hostView = host.awaitState(s -> s.players().size() == 2);
             StateMessage guestView = guest.awaitState(s -> s.players().size() == 2);
@@ -195,6 +212,9 @@ class WebSocketEndToEndTest {
                 List<String> names = state.players().stream().map(StateMessage.PlayerView::name).toList();
                 assertTrue(names.containsAll(List.of("Ann", "Bo")), names.toString());
                 assertEquals(1, state.players().stream().filter(StateMessage.PlayerView::host).count());
+                List<String> ids = state.players().stream()
+                        .map(StateMessage.PlayerView::playerId).toList();
+                assertTrue(ids.containsAll(List.of(host.playerId, guest.playerId)), ids.toString());
             }
         }
     }
@@ -205,7 +225,7 @@ class WebSocketEndToEndTest {
     void startingTheRoundPutsBothClientsOnTheTick() throws Exception {
         try (Client host = connect(); Client guest = connect()) {
             String code = createRoom(host, "Ann");
-            guest.send("{\"type\":\"join\",\"room\":\"" + code + "\",\"name\":\"Bo\"}");
+            joinRoom(guest, code, "Bo");
             assertNotNull(host.awaitState(s -> s.players().size() == 2));
 
             host.send("{\"type\":\"start\"}");
@@ -215,6 +235,9 @@ class WebSocketEndToEndTest {
             assertNotNull(guest.awaitState(s -> "RUNNING".equals(s.phase())));
 
             assertEquals(2, running.snakes().size(), "both players are on the board");
+            assertNotNull(mySnake(running, host), "host cannot find its own snake");
+            StateMessage guestRunning = guest.awaitState(s -> s.snakes().size() == 2);
+            assertNotNull(mySnake(guestRunning, guest), "guest cannot find its own snake");
 
             // The clock is genuinely advancing, not a single snapshot.
             int first = running.tick();
@@ -232,17 +255,17 @@ class WebSocketEndToEndTest {
             host.send("{\"type\":\"start\"}");
 
             StateMessage running = host.awaitState(
-                    s -> "RUNNING".equals(s.phase()) && snakeNamed(s, "Solo") != null);
+                    s -> "RUNNING".equals(s.phase()) && mySnake(s, host) != null);
             assertNotNull(running);
 
-            Direction facing = Direction.valueOf(snakeNamed(running, "Solo").snake().direction());
+            Direction facing = Direction.valueOf(mySnake(running, host).direction());
             Direction turnTo = perpendicularTo(facing);
 
             host.send("{\"type\":\"turn\",\"dir\":\"" + turnTo.name() + "\"}");
 
             StateMessage turned = host.awaitState(s -> {
-                SnakeMatch mine = snakeNamed(s, "Solo");
-                return mine != null && turnTo.name().equals(mine.snake().direction());
+                StateMessage.SnakeView mine = mySnake(s, host);
+                return mine != null && turnTo.name().equals(mine.direction());
             });
             assertNotNull(turned, "the snake never turned to " + turnTo);
         }
@@ -261,7 +284,7 @@ class WebSocketEndToEndTest {
     void concurrentInputFromTwoClientsNeverCorruptsAFrame() throws Exception {
         try (Client host = connect(); Client guest = connect()) {
             String code = createRoom(host, "Ann");
-            guest.send("{\"type\":\"join\",\"room\":\"" + code + "\",\"name\":\"Bo\"}");
+            joinRoom(guest, code, "Bo");
             assertNotNull(host.awaitState(s -> s.players().size() == 2));
             host.send("{\"type\":\"start\"}");
             assertNotNull(host.awaitState(s -> "RUNNING".equals(s.phase())));
@@ -335,7 +358,7 @@ class WebSocketEndToEndTest {
 
     private static boolean isWholeJsonObject(String frame) {
         try {
-            return JSON.readValue(frame, java.util.Map.class).containsKey("type");
+            return JSON.readValue(frame, Map.class).containsKey("type");
         } catch (Exception torn) {
             return false;
         }
@@ -371,7 +394,7 @@ class WebSocketEndToEndTest {
     void theStateMessageSurvivesTheWireFieldByField() throws Exception {
         try (Client host = connect(); Client guest = connect()) {
             String code = createRoom(host, "Ann");
-            guest.send("{\"type\":\"join\",\"room\":\"" + code + "\",\"name\":\"Bo\"}");
+            joinRoom(guest, code, "Bo");
             assertNotNull(host.awaitState(s -> s.players().size() == 2));
             host.send("{\"type\":\"start\"}");
 
@@ -385,7 +408,7 @@ class WebSocketEndToEndTest {
             assertTrue(state.tick() >= 0);
             assertEquals(32, state.width());
             assertEquals(32, state.height());
-            assertNotNull(state.hostSessionId());
+            assertNotNull(state.hostPlayerId());
             assertNull(state.winnerSessionId(), "nobody has won yet");
             assertTrue(state.standings().isEmpty(), "standings are only for the results screen");
 
@@ -399,12 +422,12 @@ class WebSocketEndToEndTest {
             // Players
             assertEquals(2, state.players().size());
             StateMessage.PlayerView ann = state.players().stream()
-                    .filter(p -> "Ann".equals(p.name())).findFirst().orElseThrow();
+                    .filter(p -> host.playerId.equals(p.playerId())).findFirst().orElseThrow();
+            assertEquals("Ann", ann.name());
             assertTrue(ann.host(), "Ann created the room");
             assertTrue(ann.connected());
             assertFalse(ann.ready());
-            assertNotNull(ann.sessionId());
-            assertEquals(state.hostSessionId(), ann.sessionId());
+            assertEquals(state.hostPlayerId(), ann.playerId());
 
             // Snakes
             for (StateMessage.SnakeView snake : state.snakes()) {
@@ -422,10 +445,58 @@ class WebSocketEndToEndTest {
             }
             // Every snake belongs to a seated player.
             List<String> seated = state.players().stream()
-                    .map(StateMessage.PlayerView::sessionId).toList();
+                    .map(StateMessage.PlayerView::playerId).toList();
             for (StateMessage.SnakeView snake : state.snakes()) {
                 assertTrue(seated.contains(snake.id()), "orphan snake " + snake.id());
             }
+            // And the id from the joined handshake picks out exactly one snake.
+            assertEquals(1, state.snakes().stream()
+                    .filter(sv -> sv.id().equals(host.playerId)).count());
+        }
+    }
+
+    // --- reconnecting on a brand new socket ---
+
+    @Test
+    void aReturningClientReclaimsItsSeatAndItsSnake() throws Exception {
+        Client host = connect();
+        String code;
+        String originalId;
+        StateMessage before;
+        try {
+            code = createRoom(host, "Ann");
+            originalId = host.playerId;
+            host.send("{\"type\":\"start\"}");
+            before = host.awaitState(s -> "RUNNING".equals(s.phase()) && mySnake(s, host) != null);
+            assertNotNull(before);
+        } finally {
+            host.close();
+        }
+
+        // A new socket means a new session id, so the seat can only be found
+        // by the id the client was given.
+        try (Client returning = connect()) {
+            assertEquals(code, rejoinRoom(returning, code, originalId));
+
+            assertEquals(originalId, returning.playerId, "same seat, same id");
+            StateMessage after = returning.awaitState(s -> mySnake(s, returning) != null);
+            assertNotNull(after, "the returning client could not find its snake");
+            assertEquals(1, after.players().size(), "no second seat was handed out");
+            assertEquals("Ann", after.players().get(0).name(), "the old name came back");
+        }
+    }
+
+    @Test
+    void claimingAnUnknownIdSeatsYouAsANewcomer() throws Exception {
+        try (Client host = connect(); Client stranger = connect()) {
+            String code = createRoom(host, "Ann");
+
+            assertEquals(code, rejoinRoom(stranger, code, "not-a-real-player-id"));
+
+            assertNotNull(stranger.playerId);
+            assertNotEquals("not-a-real-player-id", stranger.playerId, "bogus ids are not honoured");
+            assertNotEquals(host.playerId, stranger.playerId);
+            assertNotNull(host.awaitState(s -> s.players().size() == 2));
         }
     }
 
@@ -462,9 +533,9 @@ class WebSocketEndToEndTest {
             createRoom(host, "Turner");
             host.send("{\"type\":\"start\"}");
             StateMessage running = host.awaitState(
-                    s -> "RUNNING".equals(s.phase()) && snakeNamed(s, "Turner") != null);
+                    s -> "RUNNING".equals(s.phase()) && mySnake(s, host) != null);
             assertNotNull(running);
-            String facing = snakeNamed(running, "Turner").snake().direction();
+            String facing = mySnake(running, host).direction();
 
             host.send("{\"type\":\"turn\",\"dir\":\"SIDEWAYS\"}");
 
@@ -473,7 +544,7 @@ class WebSocketEndToEndTest {
 
             StateMessage after = host.awaitState(s -> s.tick() > running.tick() + 2);
             assertNotNull(after, "the server stopped ticking");
-            assertEquals(facing, snakeNamed(after, "Turner").snake().direction(),
+            assertEquals(facing, mySnake(after, host).direction(),
                     "the snake changed course on a direction the server rejected");
         }
     }
