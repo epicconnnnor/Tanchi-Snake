@@ -58,7 +58,8 @@ class GameEngineTest {
 
         assertEquals(2, s.length());
         assertEquals(1, s.foodEaten());
-        assertTrue(state.food().isEmpty());
+        assertFalse(state.food().contains(new Point(6, 5)), "eaten food should be gone");
+        assertEquals(GameEngine.FOOD_ON_BOARD, state.food().size());
     }
 
     /** Builds a snake occupying a horizontal run of cells, head at the right end. */
@@ -351,5 +352,97 @@ class GameEngineTest {
         state.addSnake(s);
         new GameEngine(new Random(seed)).tick(state);
         return s.head();
+    }
+
+    @Test
+    void tickKeepsTheBoardStockedWithFood() {
+        GameState state = new GameState(32, 32);
+        state.addSnake(new Snake("a", new Point(5, 5), Direction.RIGHT));
+
+        new GameEngine(new Random(11)).tick(state);
+
+        assertEquals(GameEngine.FOOD_ON_BOARD, state.food().size());
+    }
+
+    @Test
+    void foodNeverSpawnsOnASnakeOrOnExistingFood() {
+        // A small board forces the spawner to work around what is already there.
+        GameState state = new GameState(6, 6);
+        Snake s = horizontalSnake("a", new Point(0, 0), 5);
+        s.stun(100); // parked, so its cells stay where the assertion expects
+        state.addSnake(s);
+
+        new GameEngine(new Random(5)).tick(state);
+
+        Set<Point> occupied = new HashSet<>(s.body());
+        for (Point f : state.food()) {
+            assertFalse(occupied.contains(f), "food spawned on the snake at " + f);
+            assertTrue(state.inBounds(f), "food spawned off the board at " + f);
+        }
+        // A Set of food cannot hold duplicates, so distinctness is the size.
+        assertEquals(GameEngine.FOOD_ON_BOARD, state.food().size());
+    }
+
+    @Test
+    void foodSpawningIsReproducibleForAGivenSeed() {
+        assertEquals(foodAfterTickWithSeed(404), foodAfterTickWithSeed(404));
+    }
+
+    private static Set<Point> foodAfterTickWithSeed(long seed) {
+        GameState state = new GameState(32, 32);
+        state.addSnake(new Snake("a", new Point(5, 5), Direction.RIGHT));
+        new GameEngine(new Random(seed)).tick(state);
+        return new HashSet<>(state.food());
+    }
+
+    @Test
+    void eatenFoodIsReplacedOnTheSameTick() {
+        GameState state = new GameState(32, 32);
+        Snake s = new Snake("a", new Point(5, 5), Direction.RIGHT);
+        state.addSnake(s);
+        state.addFood(new Point(6, 5));
+
+        GameEngine engine = new GameEngine(new Random(13));
+        engine.tick(state); // tops up to FOOD_ON_BOARD after the snake eats
+        assertEquals(GameEngine.FOOD_ON_BOARD, state.food().size());
+    }
+
+    @Test
+    void spawnSnakePlacesAJoinerWithClearanceAhead() {
+        // Only (0,0) has three clear cells ahead of a snake facing right.
+        GameState state = new GameState(4, 1);
+
+        Snake s = new GameEngine(new Random(2)).spawnSnake(state, "joiner", Direction.RIGHT);
+
+        assertNotNull(s);
+        assertEquals(new Point(0, 0), s.head());
+        assertEquals("joiner", s.id());
+        assertEquals(1, state.snakes().size());
+    }
+
+    @Test
+    void spawnSnakeAvoidsCellsAlreadyOccupied() {
+        GameState state = new GameState(32, 32);
+        Snake sitting = horizontalSnake("sitting", new Point(0, 0), 20);
+        state.addSnake(sitting);
+
+        Snake joiner = new GameEngine(new Random(8)).spawnSnake(state, "joiner", Direction.RIGHT);
+
+        assertNotNull(joiner);
+        assertFalse(new HashSet<>(sitting.body()).contains(joiner.head()));
+        Point p = joiner.head();
+        for (int i = 0; i <= GameEngine.SPAWN_CLEARANCE; i++) {
+            assertTrue(state.inBounds(p), "no clearance ahead at " + p);
+            p = p.move(Direction.RIGHT);
+        }
+    }
+
+    @Test
+    void spawnSnakeReturnsNullWhenNoSpotHasClearance() {
+        // Two cells wide cannot fit a snake plus three clear cells ahead.
+        GameState state = new GameState(2, 1);
+
+        assertNull(new GameEngine(new Random(4)).spawnSnake(state, "joiner", Direction.RIGHT));
+        assertEquals(0, state.snakes().size());
     }
 }
