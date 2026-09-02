@@ -14,6 +14,7 @@ public class GameState {
     private final Map<String, Snake> snakes;
     private final Set<Point> food;
     private int tick;
+    private Snake winner;
 
     public GameState(int width, int height) {
         this.width = width;
@@ -69,6 +70,25 @@ public class GameState {
 
     public int tick() {
         return tick;
+    }
+
+    /** The snake that won the round, or null while it is still being played. */
+    public Snake winner() {
+        return winner;
+    }
+
+    public boolean hasWinner() {
+        return winner != null;
+    }
+
+    /**
+     * Records the winner. The first snake to get here keeps the title, so
+     * later calls are ignored.
+     */
+    public void setWinner(Snake s) {
+        if (winner == null) {
+            winner = s;
+        }
     }
 
     public void incrementTick() {

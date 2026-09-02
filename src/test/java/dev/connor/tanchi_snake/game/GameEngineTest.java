@@ -445,4 +445,95 @@ class GameEngineTest {
         assertNull(new GameEngine(new Random(4)).spawnSnake(state, "joiner", Direction.RIGHT));
         assertEquals(0, state.snakes().size());
     }
+
+    /** A snake one mouthful short of levelling up, with that food in front of it. */
+    private static Snake onTheBrinkOfLevel(GameState state, String id, Point at, int level) {
+        Snake s = new Snake(id, at, Direction.RIGHT);
+        s.setLevel(level - 1);
+        for (int i = 0; i < GameEngine.FOOD_PER_LEVEL - 1; i++) {
+            s.eat();
+        }
+        state.addSnake(s);
+        state.addFood(at.move(Direction.RIGHT));
+        return s;
+    }
+
+    @Test
+    void noWinnerWhileEveryoneIsBelowTheWinLevel() {
+        GameState state = new GameState(32, 32);
+        Snake s = onTheBrinkOfLevel(state, "a", new Point(5, 5), GameEngine.WIN_LEVEL - 1);
+
+        new GameEngine(new Random(21)).tick(state);
+
+        assertEquals(GameEngine.WIN_LEVEL - 1, s.level());
+        assertNull(state.winner());
+        assertFalse(state.hasWinner());
+    }
+
+    @Test
+    void reachingTheWinLevelWinsTheRound() {
+        GameState state = new GameState(32, 32);
+        Snake s = onTheBrinkOfLevel(state, "a", new Point(5, 5), GameEngine.WIN_LEVEL);
+
+        new GameEngine(new Random(21)).tick(state);
+
+        assertEquals(GameEngine.WIN_LEVEL, s.level());
+        assertTrue(state.hasWinner());
+        assertSame(s, state.winner());
+    }
+
+    @Test
+    void theBoardFreezesOnceTheRoundIsWon() {
+        GameState state = new GameState(32, 32);
+        Snake winner = onTheBrinkOfLevel(state, "a", new Point(5, 5), GameEngine.WIN_LEVEL);
+        Snake other = new Snake("b", new Point(20, 20), Direction.RIGHT);
+        state.addSnake(other);
+
+        GameEngine engine = new GameEngine(new Random(21));
+        engine.tick(state);
+        int tickAtWin = state.tick();
+        Point frozen = other.head();
+
+        engine.tick(state);
+
+        assertSame(winner, state.winner());
+        assertEquals(tickAtWin, state.tick(), "the clock should stop");
+        assertEquals(frozen, other.head(), "nobody should move after the win");
+    }
+
+    @Test
+    void theFirstWinnerKeepsTheTitle() {
+        GameState state = new GameState(32, 32);
+        Snake first = onTheBrinkOfLevel(state, "a", new Point(5, 5), GameEngine.WIN_LEVEL);
+
+        new GameEngine(new Random(21)).tick(state);
+        assertSame(first, state.winner());
+
+        // A later arrival at the win level does not take the title away.
+        Snake latecomer = new Snake("b", new Point(20, 20), Direction.RIGHT);
+        latecomer.setLevel(GameEngine.WIN_LEVEL + 2);
+        state.addSnake(latecomer);
+        new GameEngine(new Random(21)).tick(state);
+
+        assertSame(first, state.winner());
+    }
+
+    @Test
+    void aTieOnTheSameTickResolvesTheSameWayEveryTime() {
+        assertEquals("a", winnerIdForTiedSnakes());
+        // Rerun from scratch: the result must not ride on map iteration order.
+        assertEquals("a", winnerIdForTiedSnakes());
+    }
+
+    private static String winnerIdForTiedSnakes() {
+        GameState state = new GameState(32, 32);
+        // Ids added in reverse so insertion order cannot be what decides it.
+        onTheBrinkOfLevel(state, "z", new Point(20, 20), GameEngine.WIN_LEVEL);
+        onTheBrinkOfLevel(state, "a", new Point(5, 5), GameEngine.WIN_LEVEL);
+
+        new GameEngine(new Random(21)).tick(state);
+
+        assertTrue(state.hasWinner());
+        return state.winner().id();
+    }
 }
