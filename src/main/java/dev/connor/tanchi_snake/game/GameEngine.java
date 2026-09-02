@@ -16,6 +16,9 @@ public class GameEngine {
     public static final int STUN_TICKS = 10;
     public static final int WIN_LEVEL = 10;
 
+    /** How much food the board is kept stocked with. */
+    public static final int FOOD_ON_BOARD = 5;
+
     /** Clear cells a snake needs ahead of it to be given a spot. */
     public static final int SPAWN_CLEARANCE = 3;
 
@@ -167,7 +170,61 @@ public class GameEngine {
             }
         }
 
+        replenishFood(state);
         state.incrementTick();
+    }
+
+    /**
+     * Places a new snake for a joining player, under the same clearance rule
+     * respawning uses.
+     *
+     * @return the snake, already added to the state, or null if the board has
+     *         no room for one
+     */
+    public Snake spawnSnake(GameState state, String id, Direction direction) {
+        Point spot = findSpawn(state, direction, null, Set.of());
+        if (spot == null) {
+            return null;
+        }
+        Snake s = new Snake(id, spot, direction);
+        state.addSnake(s);
+        return s;
+    }
+
+    /** Tops the board back up to {@link #FOOD_ON_BOARD} pieces of food. */
+    private void replenishFood(GameState state) {
+        Set<Point> taken = new HashSet<>(state.occupiedCells());
+        taken.addAll(state.food());
+
+        while (state.food().size() < FOOD_ON_BOARD) {
+            Point p = findFreeCell(state, taken);
+            if (p == null) {
+                break; // board is full; try again next tick
+            }
+            state.addFood(p);
+            taken.add(p);
+        }
+    }
+
+    /** A random cell holding neither snake nor food, or null if there is none. */
+    private Point findFreeCell(GameState state, Set<Point> taken) {
+        for (int i = 0; i < PLACEMENT_ATTEMPTS; i++) {
+            Point p = new Point(random.nextInt(state.width()), random.nextInt(state.height()));
+            if (!taken.contains(p)) {
+                return p;
+            }
+        }
+
+        // Crowded board: sweep it rather than let the random search give up.
+        for (int y = 0; y < state.height(); y++) {
+            for (int x = 0; x < state.width(); x++) {
+                Point p = new Point(x, y);
+                if (!taken.contains(p)) {
+                    return p;
+                }
+            }
+        }
+        return null;
     }
 
     /**
@@ -201,7 +258,7 @@ public class GameEngine {
         s.setLevel(newLevel);
         s.resetFoodEaten();
 
-        Point spot = findSpawn(state, s, claimed);
+        Point spot = findSpawn(state, s.direction(), s, claimed);
         if (spot != null) {
             s.respawnAt(spot);
         }
@@ -211,23 +268,23 @@ public class GameEngine {
     }
 
     /**
-     * Picks a random cell for this snake that nothing else occupies and that
-     * has {@link #SPAWN_CLEARANCE} clear cells ahead of it in the snake's
-     * current direction, so it does not respawn straight into a wall.
+     * Picks a random cell that nothing else occupies and that
+     * has {@link #SPAWN_CLEARANCE} clear cells ahead of it in the given
+     * direction, so nothing is placed staring straight at a wall.
      *
      * @return the spot, or null if the board has no room for one
      */
-    private Point findSpawn(GameState state, Snake s, Set<Point> claimed) {
+    private Point findSpawn(GameState state, Direction direction, Snake ignore, Set<Point> claimed) {
         Set<Point> blocked = new HashSet<>(claimed);
         for (Snake other : state.snakes()) {
-            if (other != s) {
+            if (other != ignore) {
                 blocked.addAll(other.body());
             }
         }
 
         for (int i = 0; i < PLACEMENT_ATTEMPTS; i++) {
             Point p = new Point(random.nextInt(state.width()), random.nextInt(state.height()));
-            if (hasClearRun(state, blocked, p, s.direction())) {
+            if (hasClearRun(state, blocked, p, direction)) {
                 return p;
             }
         }
@@ -236,7 +293,7 @@ public class GameEngine {
         for (int y = 0; y < state.height(); y++) {
             for (int x = 0; x < state.width(); x++) {
                 Point p = new Point(x, y);
-                if (hasClearRun(state, blocked, p, s.direction())) {
+                if (hasClearRun(state, blocked, p, direction)) {
                     return p;
                 }
             }
