@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tanchi Snake</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <!-- 1. MENU -->
+  <section id="menu" class="screen">
+    <h1>Tanchi Snake</h1>
+    <label for="name">Snake name</label>
+    <input id="name" type="text" maxlength="20" placeholder="leave blank for a random one" autocomplete="off">
+
+    <div class="row">
+      <button id="create-btn" type="button">Create room</button>
+    </div>
+
+    <div class="divider">or</div>
+
+    <label for="room">Room code</label>
+    <input id="room" type="text" maxlength="4" placeholder="ABCD" autocomplete="off" spellcheck="false">
+    <div class="row">
+      <button id="join-btn" type="button">Join room</button>
+    </div>
+  </section>
+
+  <!-- 2. LOBBY -->
+  <section id="lobby" class="screen" hidden>
+    <p class="label">Room code</p>
+    <p id="lobby-code" class="code">----</p>
+
+    <ul id="lobby-players" class="players"></ul>
+
+    <div class="row">
+      <button id="ready-btn" type="button">Ready up</button>
+      <button id="start-btn" type="button" hidden>Start round</button>
+    </div>
+    <p id="lobby-hint" class="hint">Waiting for the host to start.</p>
+  </section>
+
+  <!-- 3. GAME -->
+  <section id="game" class="screen game" hidden>
+    <canvas id="board" width="512" height="512"></canvas>
+    <aside class="sidebar">
+      <p class="label">Room <span id="game-code" class="mono"></span></p>
+      <p class="label">Tick <span id="game-tick" class="mono">0</span> &middot; <span id="game-phase" class="mono">-</span></p>
+      <ol id="scoreboard" class="scores"></ol>
+      <p class="hint">WASD or arrow keys to steer.</p>
+    </aside>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
