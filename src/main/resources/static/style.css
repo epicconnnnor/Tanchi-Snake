@@ -1,0 +1,165 @@
+/* Layout only. This is the build we play to tune balance, not to look at. */
+
+:root {
+  --bg: #14161a;
+  --panel: #1e2228;
+  --line: #363c45;
+  --text: #e6e8eb;
+  --muted: #9aa3ad;
+  --accent: #4ade80;
+  --warn: #f87171;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, Segoe UI, sans-serif;
+}
+
+h1 {
+  margin: 0 0 20px;
+  font-size: 22px;
+}
+
+.screen {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.screen[hidden] { display: none; }
+
+label, .label {
+  display: block;
+  margin: 12px 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+input {
+  width: 100%;
+  max-width: 320px;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  font: inherit;
+}
+
+#room {
+  max-width: 140px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 20px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+button {
+  padding: 9px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover { border-color: var(--muted); }
+button[hidden] { display: none; }
+
+button.primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.divider {
+  margin: 20px 0 4px;
+  color: var(--muted);
+}
+
+.code {
+  margin: 0 0 16px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 64px;
+  letter-spacing: 0.15em;
+  line-height: 1;
+}
+
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+.players, .scores {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.players li, .scores li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  margin-bottom: 4px;
+  background: var(--panel);
+}
+
+.players .tags, .scores .lvl {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.you { color: var(--accent); }
+.away { opacity: 0.5; }
+
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Game screen */
+
+.game {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  max-width: none;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+#board {
+  background: #0b0d10;
+  border: 2px solid var(--line);
+  border-radius: 2px;
+  image-rendering: pixelated;
+}
+
+.sidebar {
+  min-width: 240px;
+  max-width: 300px;
+}
+
+.banner {
+  max-width: 760px;
+  margin: 0 auto 16px;
+  padding: 9px 12px;
+  border: 1px solid var(--warn);
+  border-radius: 4px;
+  color: var(--warn);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.banner[hidden] { display: none; }
