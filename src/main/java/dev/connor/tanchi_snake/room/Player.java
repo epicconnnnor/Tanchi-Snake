@@ -7,6 +7,8 @@ public class Player {
     private boolean ready;
     private boolean connected;
     private long disconnectedAtMillis;
+    private int lastKnownLevel;
+    private int lastKnownLevelTick;
 
     public Player(String sessionId, String name) {
         this.sessionId = sessionId;
@@ -47,6 +49,23 @@ public class Player {
     public void markDisconnected(long nowMillis) {
         this.connected = false;
         this.disconnectedAtMillis = nowMillis;
+    }
+
+    /**
+     * Where the player stood when their snake left the board. Keeps them on the
+     * results screen after a disconnect outlives the reconnect window.
+     */
+    public int lastKnownLevel() {
+        return lastKnownLevel;
+    }
+
+    public int lastKnownLevelTick() {
+        return lastKnownLevelTick;
+    }
+
+    public void rememberStanding(int level, int levelTick) {
+        this.lastKnownLevel = level;
+        this.lastKnownLevelTick = levelTick;
     }
 
     public void markConnected() {

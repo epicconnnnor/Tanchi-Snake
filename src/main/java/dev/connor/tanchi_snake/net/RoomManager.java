@@ -13,6 +13,8 @@ import org.springframework.stereotype.Component;
 import dev.connor.tanchi_snake.room.Player;
 import dev.connor.tanchi_snake.room.Room;
 import dev.connor.tanchi_snake.room.RoomCodeGenerator;
+import dev.connor.tanchi_snake.room.RoomPhase;
+import dev.connor.tanchi_snake.room.SnakeNameGenerator;
 
 /**
  * The registry of live rooms: creating them, letting players in and out, and
@@ -27,6 +29,8 @@ public class RoomManager {
     private final Map<String, Room> rooms = new ConcurrentHashMap<>();
     private final Map<String, String> roomBySession = new ConcurrentHashMap<>();
     private final RoomCodeGenerator codes;
+    private final SnakeNameGenerator names;
+    private final Random random;
     private final Clock clock;
 
     public RoomManager() {
@@ -35,12 +39,14 @@ public class RoomManager {
 
     public RoomManager(Random random, Clock clock) {
         this.codes = new RoomCodeGenerator(random);
+        this.names = new SnakeNameGenerator(random);
+        this.random = random;
         this.clock = clock;
     }
 
     public Room create() {
         String code = freeCode();
-        Room room = new Room(code);
+        Room room = new Room(code, random);
         rooms.put(code, room);
         return room;
     }
@@ -91,6 +97,8 @@ public class RoomManager {
         Player returning = room.player(sessionId);
         if (returning != null) {
             room.markConnected(sessionId);
+            // They still own the snake that was frozen when they dropped.
+            room.resumeSnake(sessionId);
             roomBySession.put(sessionId, room.code());
             return JoinResult.rejoined(room, returning);
         }
@@ -99,8 +107,13 @@ public class RoomManager {
             return JoinResult.failed(JoinResult.Failure.ROOM_FULL);
         }
 
-        Player seated = room.add(new Player(sessionId, name));
+        Player seated = room.add(new Player(sessionId, names.normalise(name)));
         roomBySession.put(sessionId, room.code());
+        // Joining mid-round puts them straight on the board at level 1, with
+        // no grace period.
+        if (room.phase() == RoomPhase.RUNNING) {
+            room.spawnSnakeFor(seated);
+        }
         return JoinResult.joined(room, seated);
     }
 
@@ -112,6 +125,8 @@ public class RoomManager {
         Room room = roomOf(sessionId);
         if (room != null) {
             room.markDisconnected(sessionId, clock.millis());
+            // Freeze right away rather than waiting for the next tick.
+            room.holdDisconnectedSnakes();
         }
         return room;
     }
@@ -124,6 +139,20 @@ public class RoomManager {
         }
         roomBySession.remove(sessionId);
         return room;
+    }
+
+    /** Renames a player, falling back to a generated name if they blanked it. */
+    public String rename(String sessionId, String requested) {
+        Room room = roomOf(sessionId);
+        if (room == null) {
+            return null;
+        }
+        Player p = room.player(sessionId);
+        if (p == null) {
+            return null;
+        }
+        p.setName(names.normalise(requested));
+        return p.name();
     }
 
     /**
