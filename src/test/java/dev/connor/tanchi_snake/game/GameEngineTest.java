@@ -137,4 +137,101 @@ class GameEngineTest {
         assertEquals(12, a.length());
         assertEquals(4, b.length());
     }
+
+    /** Builds a snake curled into an L, long enough to have a real interior. */
+    private static Snake curledSnake(String id) {
+        Snake s = new Snake(id, new Point(10, 10), Direction.RIGHT);
+        s.move(true);                    // (11,10)
+        s.move(true);                    // (12,10)
+        s.setDirection(Direction.DOWN);
+        s.move(true);                    // (12,11)
+        s.setDirection(Direction.LEFT);
+        s.move(true);                    // (11,11)
+        return s;
+    }
+
+    @Test
+    void headToHeadLowerLevelDiesHigherSurvivesUntouched() {
+        GameState state = new GameState(32, 32);
+        Snake high = new Snake("high", new Point(5, 5), Direction.RIGHT);
+        high.setLevel(6);
+        Snake low = new Snake("low", new Point(7, 5), Direction.LEFT);
+        low.setLevel(3);
+        state.addSnake(high);
+        state.addSnake(low);
+
+        new GameEngine().tick(state);
+
+        // high took the contested cell and paid nothing.
+        assertEquals(new Point(6, 5), high.head());
+        assertEquals(6, high.level());
+        assertEquals(0, high.stunTicks());
+        // low lost the exchange and died.
+        assertEquals(1, low.level());
+        assertEquals(4, low.length());
+    }
+
+    @Test
+    void headToHeadSameLevelStunsBothAndNeitherMoves() {
+        GameState state = new GameState(32, 32);
+        Snake a = new Snake("a", new Point(5, 5), Direction.RIGHT);
+        a.setLevel(4);
+        Snake b = new Snake("b", new Point(7, 5), Direction.LEFT);
+        b.setLevel(4);
+        state.addSnake(a);
+        state.addSnake(b);
+
+        new GameEngine().tick(state);
+
+        // Neither died.
+        assertEquals(4, a.level());
+        assertEquals(4, b.level());
+        // Neither moved.
+        assertEquals(new Point(5, 5), a.head());
+        assertEquals(new Point(7, 5), b.head());
+        // Both stunned.
+        assertEquals(GameEngine.STUN_TICKS, a.stunTicks());
+        assertEquals(GameEngine.STUN_TICKS, b.stunTicks());
+    }
+
+    @Test
+    void headIntoOwnBodyStunsButDoesNotKill() {
+        GameState state = new GameState(32, 32);
+        Snake s = curledSnake("s");
+        s.setLevel(5);
+        // Body is (11,11) (12,11) (12,10) (11,10) (10,10), head at (11,11).
+        // Turning up aims at (11,10), one of its own middle segments.
+        s.setDirection(Direction.UP);
+        state.addSnake(s);
+
+        new GameEngine().tick(state);
+
+        // Stunned, not dead: level and length untouched, and it stayed put.
+        assertEquals(5, s.level());
+        assertEquals(5, s.length());
+        assertEquals(new Point(11, 11), s.head());
+        assertEquals(GameEngine.STUN_TICKS, s.stunTicks());
+    }
+
+    @Test
+    void headIntoOwnVacatingTailIsLegal() {
+        GameState state = new GameState(32, 32);
+        Snake s = new Snake("s", new Point(10, 10), Direction.RIGHT);
+        s.move(true);                    // (11,10)
+        s.setDirection(Direction.DOWN);
+        s.move(true);                    // (11,11)
+        s.setDirection(Direction.LEFT);
+        s.move(true);                    // (10,11)
+        s.setLevel(5);
+        // Body is (10,11) (11,11) (11,10) (10,10). Turning up aims at (10,10),
+        // its own tail, which it vacates on this same tick.
+        s.setDirection(Direction.UP);
+        state.addSnake(s);
+
+        new GameEngine().tick(state);
+
+        assertEquals(new Point(10, 10), s.head());
+        assertEquals(0, s.stunTicks());
+        assertEquals(5, s.level());
+    }
 }

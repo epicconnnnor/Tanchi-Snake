@@ -30,20 +30,69 @@ public class GameEngine {
             intended.put(s, s.head().move(s.direction()));
         }
 
-        // 3. PASS TWO — resolve collisions against the full picture.
+        // 3. PASS TWO — resolve every outcome against the full picture. Each
+        // stage below reads only inputs that were already settled before it
+        // ran, so nothing depends on the order snakes come out of the map.
         Set<Snake> dead = new HashSet<>();
+        Set<Snake> stunned = new HashSet<>();
 
+        // 3a. Off the board.
         for (Map.Entry<Snake, Point> e : intended.entrySet()) {
             if (!state.inBounds(e.getValue())) {
                 dead.add(e.getKey());
             }
         }
 
-        // Bodies as they will look AFTER every snake has moved. Snapshotting
-        // these before any outcome is applied is what keeps the result
-        // independent of the order snakes happen to come out of the map.
-        // A snake already dead this tick leaves the board, so its cells are
-        // not lethal to anyone.
+        // 3b. Head into head — two or more snakes claiming the same cell.
+        Map<Point, List<Snake>> contested = new HashMap<>();
+        for (Map.Entry<Snake, Point> e : intended.entrySet()) {
+            if (!dead.contains(e.getKey())) {
+                contested.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(e.getKey());
+            }
+        }
+        for (List<Snake> rivals : contested.values()) {
+            if (rivals.size() < 2) {
+                continue;
+            }
+            int topLevel = 0;
+            for (Snake s : rivals) {
+                topLevel = Math.max(topLevel, s.level());
+            }
+            List<Snake> atTop = new ArrayList<>();
+            for (Snake s : rivals) {
+                if (s.level() < topLevel) {
+                    dead.add(s);
+                } else {
+                    atTop.add(s);
+                }
+            }
+            // A single highest level takes the cell untouched. A tie stuns
+            // everyone still standing: nobody dies and nobody moves.
+            if (atTop.size() > 1) {
+                stunned.addAll(atTop);
+            }
+        }
+
+        // 3c. Head into own body — stunned, not dead.
+        for (Map.Entry<Snake, Point> e : intended.entrySet()) {
+            Snake s = e.getKey();
+            if (dead.contains(s) || stunned.contains(s)) {
+                continue;
+            }
+            if (bodyAfterMove(state, s, e.getValue()).contains(e.getValue())) {
+                stunned.add(s);
+            }
+        }
+
+        // Movement is settled here: the dead and the freshly stunned stay put.
+        intended.keySet().removeAll(dead);
+        intended.keySet().removeAll(stunned);
+
+        // 3d. Bodies as they will look AFTER every surviving move. Snapshotting
+        // these before any death is applied is what keeps the outcome
+        // order-independent. A snake already dead leaves the board, so its
+        // cells are not lethal to anyone. A stunned snake stays where it is,
+        // and its body remains just as lethal as a moving one's.
         Map<Snake, Set<Point>> bodiesAfterMove = new HashMap<>();
         for (Snake s : state.snakes()) {
             if (!dead.contains(s)) {
@@ -51,27 +100,29 @@ public class GameEngine {
             }
         }
 
-        // Head into another snake's body: the snake with the head dies.
+        // 3e. Head into another snake's body: the snake with the head dies.
+        Set<Snake> ranIntoBody = new HashSet<>();
         for (Map.Entry<Snake, Point> e : intended.entrySet()) {
             Snake s = e.getKey();
-            if (dead.contains(s)) {
-                continue;
-            }
             for (Map.Entry<Snake, Set<Point>> other : bodiesAfterMove.entrySet()) {
                 if (other.getKey() != s && other.getValue().contains(e.getValue())) {
-                    dead.add(s);
+                    ranIntoBody.add(s);
                     break;
                 }
             }
         }
-        // TODO: head-on-head, self-collision
+        dead.addAll(ranIntoBody);
+        intended.keySet().removeAll(ranIntoBody);
 
+        // 4. Apply the outcomes.
         for (Snake s : dead) {
             kill(s);
-            intended.remove(s);
+        }
+        for (Snake s : stunned) {
+            s.stun(STUN_TICKS);
         }
 
-        // 4. Apply surviving moves, growing if food was eaten.
+        // 5. Apply surviving moves, growing if food was eaten.
         for (Map.Entry<Snake, Point> e : intended.entrySet()) {
             Snake s = e.getKey();
             Point newHead = e.getValue();
@@ -100,16 +151,16 @@ public class GameEngine {
      * <p>TAIL RULE: a snake that moves without growing vacates its tail cell, so
      * that cell is deliberately left out. Moving into the cell another snake's
      * tail is leaving on this same tick is LEGAL — the two never share a cell.
-     * A snake that grows keeps its tail, so that cell stays lethal.
+     * The same holds for a snake's own tail. A snake that grows keeps its tail,
+     * so that cell stays lethal.
      *
-     * @param newHead where the snake is headed, or null if it is stunned and
-     *                staying put
+     * @param newHead where the snake is headed, or null if it is staying put
      */
     private Set<Point> bodyAfterMove(GameState state, Snake s, Point newHead) {
         List<Point> cells = new ArrayList<>(s.body()); // head first, tail last
 
         if (newHead == null) {
-            // Stunned: nothing shifts, so every cell behind the head stays put.
+            // Not moving, so every cell behind the head stays exactly where it is.
             return new HashSet<>(cells.subList(1, cells.size()));
         }
 
