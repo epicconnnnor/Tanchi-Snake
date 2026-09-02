@@ -536,4 +536,54 @@ class GameEngineTest {
         assertTrue(state.hasWinner());
         return state.winner().id();
     }
+
+    @Test
+    void levellingUpRecordsTheTickItHappenedOn() {
+        GameState state = new GameState(32, 32);
+        Snake s = new Snake("a", new Point(5, 5), Direction.RIGHT);
+        state.addSnake(s);
+        GameEngine engine = new GameEngine(new Random(31));
+
+        // Run the board forward so the level-up lands on a non-zero tick.
+        for (int i = 0; i < 3; i++) {
+            engine.tick(state);
+        }
+        assertEquals(0, s.levelReachedTick(), "no level-up yet");
+
+        int tickBeforeLevelUp = state.tick();
+        s.setLevel(4);
+        for (int i = 0; i < GameEngine.FOOD_PER_LEVEL - 1; i++) {
+            s.eat();
+        }
+        state.addFood(s.head().move(s.direction()));
+        engine.tick(state);
+
+        assertEquals(5, s.level());
+        assertEquals(tickBeforeLevelUp, s.levelReachedTick());
+    }
+
+    @Test
+    void aLaterLevelUpOverwritesTheEarlierStamp() {
+        GameState state = new GameState(32, 32);
+        Snake s = new Snake("a", new Point(5, 5), Direction.RIGHT);
+        state.addSnake(s);
+        GameEngine engine = new GameEngine(new Random(32));
+
+        int first = levelUpNow(state, engine, s);
+        int second = levelUpNow(state, engine, s);
+
+        assertTrue(second > first, "second level-up should be on a later tick");
+        assertEquals(second, s.levelReachedTick());
+    }
+
+    /** Feeds the snake its last mouthful and returns the tick it levelled on. */
+    private static int levelUpNow(GameState state, GameEngine engine, Snake s) {
+        for (int i = s.foodEaten(); i < GameEngine.FOOD_PER_LEVEL - 1; i++) {
+            s.eat();
+        }
+        state.addFood(s.head().move(s.direction()));
+        int tick = state.tick();
+        engine.tick(state);
+        return tick;
+    }
 }

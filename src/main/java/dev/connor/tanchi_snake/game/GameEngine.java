@@ -169,6 +169,9 @@ public class GameEngine {
                 s.eat();
                 if (s.foodEaten() >= FOOD_PER_LEVEL) {
                     s.setLevel(s.level() + 1);
+                    // Stamped on the way up only. Ranking compares snakes on
+                    // the same level, and the earlier arrival takes it.
+                    s.setLevelReachedTick(state.tick());
                     s.resetFoodEaten();
                     s.growTo(s.level() * TILES_PER_LEVEL);
                 }

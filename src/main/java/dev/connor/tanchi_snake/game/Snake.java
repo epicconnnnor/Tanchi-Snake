@@ -13,6 +13,7 @@ public class Snake {
     private int level;
     private int stunTicks;
     private int foodEaten;
+    private int levelReachedTick;
 
     public Snake(String id, Point start, Direction direction) {
         this.id = id;
@@ -20,6 +21,7 @@ public class Snake {
         this.level = 1;
         this.stunTicks = 0;
         this.foodEaten = 0;
+        this.levelReachedTick = 0;
         this.body = new ArrayDeque<>();
         this.body.addFirst(start);
     }
@@ -58,6 +60,14 @@ public class Snake {
         return foodEaten;
     }
 
+    /**
+     * The tick on which this snake last levelled up. Ranking uses it to break
+     * ties between snakes sitting on the same level: the earlier arrival wins.
+     */
+    public int levelReachedTick() {
+        return levelReachedTick;
+    }
+
     // --- mutators ---
 
     public void move(boolean grow) {
@@ -94,6 +104,10 @@ public class Snake {
 
     public void setLevel(int level) {
         this.level = level;
+    }
+
+    public void setLevelReachedTick(int tick) {
+        this.levelReachedTick = tick;
     }
 
     public void stun(int ticks) {
