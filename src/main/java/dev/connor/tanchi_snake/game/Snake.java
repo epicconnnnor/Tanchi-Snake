@@ -68,6 +68,15 @@ public class Snake {
         }
     }
 
+    /**
+     * Moves the whole snake to a fresh cell, collapsed down to a single
+     * segment. Callers grow it back to the length they want afterwards.
+     */
+    public void respawnAt(Point start) {
+        body.clear();
+        body.addFirst(start);
+    }
+
     public void growTo(int targetLength) {
         while (body.size() < targetLength) {
             body.addLast(body.getLast());

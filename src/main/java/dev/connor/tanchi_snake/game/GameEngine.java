@@ -1,10 +1,12 @@
 package dev.connor.tanchi_snake.game;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 public class GameEngine {
@@ -13,6 +15,22 @@ public class GameEngine {
     public static final int TILES_PER_LEVEL = 4;
     public static final int STUN_TICKS = 10;
     public static final int WIN_LEVEL = 10;
+
+    /** Clear cells a snake needs ahead of it to be given a spot. */
+    public static final int SPAWN_CLEARANCE = 3;
+
+    /** Random spots tried before falling back to a sweep of the board. */
+    private static final int PLACEMENT_ATTEMPTS = 200;
+
+    private final Random random;
+
+    public GameEngine() {
+        this(new Random());
+    }
+
+    public GameEngine(Random random) {
+        this.random = random;
+    }
 
     public void tick(GameState state) {
 
@@ -115,8 +133,16 @@ public class GameEngine {
         intended.keySet().removeAll(ranIntoBody);
 
         // 4. Apply the outcomes.
-        for (Snake s : dead) {
-            kill(s);
+        // Sorted so that two snakes dying on the same tick are always given
+        // their new spots in the same order, keeping placement reproducible
+        // for a given seed.
+        List<Snake> toRespawn = new ArrayList<>(dead);
+        toRespawn.sort(Comparator.comparing(Snake::id));
+        // Survivors have not moved yet, so hold their target cells against
+        // respawn placement too.
+        Set<Point> claimed = new HashSet<>(intended.values());
+        for (Snake s : toRespawn) {
+            kill(state, s, claimed);
         }
         for (Snake s : stunned) {
             s.stun(STUN_TICKS);
@@ -170,10 +196,63 @@ public class GameEngine {
         return new HashSet<>(cells.subList(0, end));
     }
 
-    private void kill(Snake s) {
+    private void kill(GameState state, Snake s, Set<Point> claimed) {
         int newLevel = Math.max(1, s.level() - 2);
         s.setLevel(newLevel);
         s.resetFoodEaten();
+
+        Point spot = findSpawn(state, s, claimed);
+        if (spot != null) {
+            s.respawnAt(spot);
+        }
+        // Grow last: respawnAt collapses the snake to one segment, and a snake
+        // that could not be placed still owes the board its new length.
         s.growTo(newLevel * TILES_PER_LEVEL);
+    }
+
+    /**
+     * Picks a random cell for this snake that nothing else occupies and that
+     * has {@link #SPAWN_CLEARANCE} clear cells ahead of it in the snake's
+     * current direction, so it does not respawn straight into a wall.
+     *
+     * @return the spot, or null if the board has no room for one
+     */
+    private Point findSpawn(GameState state, Snake s, Set<Point> claimed) {
+        Set<Point> blocked = new HashSet<>(claimed);
+        for (Snake other : state.snakes()) {
+            if (other != s) {
+                blocked.addAll(other.body());
+            }
+        }
+
+        for (int i = 0; i < PLACEMENT_ATTEMPTS; i++) {
+            Point p = new Point(random.nextInt(state.width()), random.nextInt(state.height()));
+            if (hasClearRun(state, blocked, p, s.direction())) {
+                return p;
+            }
+        }
+
+        // Crowded board: sweep it rather than let the random search give up.
+        for (int y = 0; y < state.height(); y++) {
+            for (int x = 0; x < state.width(); x++) {
+                Point p = new Point(x, y);
+                if (hasClearRun(state, blocked, p, s.direction())) {
+                    return p;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** True if the start cell and the run ahead of it are on the board and free. */
+    private boolean hasClearRun(GameState state, Set<Point> blocked, Point start, Direction d) {
+        Point p = start;
+        for (int i = 0; i <= SPAWN_CLEARANCE; i++) {
+            if (!state.inBounds(p) || blocked.contains(p)) {
+                return false;
+            }
+            p = p.move(d);
+        }
+        return true;
     }
 }

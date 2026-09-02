@@ -1,5 +1,9 @@
 package dev.connor.tanchi_snake.game;
 
+import java.util.HashSet;
+import java.util.Random;
+import java.util.Set;
+
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -233,5 +237,119 @@ class GameEngineTest {
         assertEquals(new Point(10, 10), s.head());
         assertEquals(0, s.stunTicks());
         assertEquals(5, s.level());
+    }
+
+    @Test
+    void stunnedSnakeBodyIsStillLethal() {
+        GameState state = new GameState(32, 32);
+        // b occupies (10,10) (11,10) (12,10) but is stunned, so it stays put.
+        Snake b = horizontalSnake("b", new Point(10, 10), 3);
+        b.stun(5);
+        Snake a = new Snake("a", new Point(11, 11), Direction.UP);
+        a.setLevel(5);
+        state.addSnake(b);
+        state.addSnake(a);
+
+        new GameEngine(new Random(1)).tick(state);
+
+        assertEquals(3, a.level());
+        assertEquals(12, a.length());
+        // b never moved and took no damage.
+        assertEquals(new Point(12, 10), b.head());
+        assertEquals(1, b.level());
+    }
+
+    @Test
+    void stunnedSnakeTailIsLethalBecauseItNeverVacates() {
+        GameState state = new GameState(32, 32);
+        Snake b = horizontalSnake("b", new Point(10, 10), 3);
+        b.stun(5);
+        // (10,10) is b's tail. A moving snake would be vacating it, but a
+        // stunned one is not, so running into it is fatal.
+        Snake a = new Snake("a", new Point(10, 11), Direction.UP);
+        a.setLevel(5);
+        state.addSnake(b);
+        state.addSnake(a);
+
+        new GameEngine(new Random(1)).tick(state);
+
+        assertEquals(3, a.level());
+        assertEquals(12, a.length());
+    }
+
+    @Test
+    void deathDropsTwoLevelsAndResizesToMatch() {
+        GameState state = new GameState(32, 32);
+        Snake s = new Snake("a", new Point(31, 5), Direction.RIGHT);
+        s.setLevel(7);
+        state.addSnake(s);
+
+        new GameEngine(new Random(1)).tick(state);
+
+        assertEquals(5, s.level());
+        assertEquals(5 * GameEngine.TILES_PER_LEVEL, s.length());
+        assertEquals(0, s.foodEaten());
+    }
+
+    @Test
+    void deathLevelIsFlooredAtOne() {
+        GameState state = new GameState(32, 32);
+        Snake s = new Snake("a", new Point(31, 5), Direction.RIGHT);
+        s.setLevel(2);
+        state.addSnake(s);
+
+        new GameEngine(new Random(1)).tick(state);
+
+        assertEquals(1, s.level());
+        assertEquals(GameEngine.TILES_PER_LEVEL, s.length());
+    }
+
+    @Test
+    void respawnLandsOnACellWithClearanceAhead() {
+        // A 4x1 board leaves exactly one spot with 3 clear cells ahead of a
+        // snake facing right: (0,0). Anything further right runs off the edge.
+        GameState state = new GameState(4, 1);
+        Snake s = new Snake("a", new Point(3, 0), Direction.RIGHT);
+        state.addSnake(s);
+
+        new GameEngine(new Random(7)).tick(state);
+
+        assertEquals(new Point(0, 0), s.head());
+    }
+
+    @Test
+    void respawnAvoidsCellsOtherSnakesOccupy() {
+        GameState state = new GameState(32, 32);
+        Snake blocker = horizontalSnake("blocker", new Point(0, 0), 20);
+        blocker.stun(100); // parked, so it stays put and stays in the way
+        Snake s = new Snake("a", new Point(31, 5), Direction.RIGHT);
+        state.addSnake(blocker);
+        state.addSnake(s);
+
+        new GameEngine(new Random(3)).tick(state);
+
+        Set<Point> blockerCells = new HashSet<>(blocker.body());
+        for (Point cell : s.body()) {
+            assertFalse(blockerCells.contains(cell), "respawned onto the blocker at " + cell);
+        }
+        // And it still landed somewhere with room ahead of it.
+        Point p = s.head();
+        for (int i = 0; i <= GameEngine.SPAWN_CLEARANCE; i++) {
+            assertTrue(state.inBounds(p), "no clearance ahead at " + p);
+            p = p.move(Direction.RIGHT);
+        }
+    }
+
+    @Test
+    void respawnPlacementIsReproducibleForAGivenSeed() {
+        assertEquals(respawnHeadWithSeed(99), respawnHeadWithSeed(99));
+    }
+
+    private static Point respawnHeadWithSeed(long seed) {
+        GameState state = new GameState(32, 32);
+        Snake s = new Snake("a", new Point(31, 5), Direction.RIGHT);
+        state.addSnake(s);
+        new GameEngine(new Random(seed)).tick(state);
+        return s.head();
     }
 }
