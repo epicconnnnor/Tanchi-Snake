@@ -1,0 +1,65 @@
+package dev.connor.tanchi_snake.room;
+
+import dev.connor.tanchi_snake.game.Direction;
+
+/**
+ * One validated instruction from a client, waiting to be applied.
+ *
+ * <p>Socket threads only ever build these and put them on a queue. Everything
+ * they describe is carried out later, on the scheduler thread.
+ */
+public record ClientCommand(
+        String sessionId,
+        Type type,
+        String roomCode,
+        String name,
+        Direction direction) {
+
+    public enum Type {
+        CREATE,
+        JOIN,
+        RENAME,
+        READY,
+        START,
+        TURN,
+        PLAY_AGAIN,
+        DISCONNECT
+    }
+
+    public static ClientCommand create(String sessionId, String name) {
+        return new ClientCommand(sessionId, Type.CREATE, null, name, null);
+    }
+
+    public static ClientCommand join(String sessionId, String roomCode, String name) {
+        return new ClientCommand(sessionId, Type.JOIN, roomCode, name, null);
+    }
+
+    public static ClientCommand rename(String sessionId, String name) {
+        return new ClientCommand(sessionId, Type.RENAME, null, name, null);
+    }
+
+    public static ClientCommand ready(String sessionId) {
+        return new ClientCommand(sessionId, Type.READY, null, null, null);
+    }
+
+    public static ClientCommand start(String sessionId) {
+        return new ClientCommand(sessionId, Type.START, null, null, null);
+    }
+
+    public static ClientCommand turn(String sessionId, Direction direction) {
+        return new ClientCommand(sessionId, Type.TURN, null, null, direction);
+    }
+
+    public static ClientCommand playAgain(String sessionId) {
+        return new ClientCommand(sessionId, Type.PLAY_AGAIN, null, null, null);
+    }
+
+    public static ClientCommand disconnect(String sessionId) {
+        return new ClientCommand(sessionId, Type.DISCONNECT, null, null, null);
+    }
+
+    /** True for the commands that make sense before a player is in a room. */
+    public boolean isLobbyLevel() {
+        return type == Type.CREATE || type == Type.JOIN || type == Type.DISCONNECT;
+    }
+}
