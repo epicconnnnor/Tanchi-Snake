@@ -72,10 +72,11 @@ public class GameLoop {
                 switch (c.type()) {
                     case CREATE -> {
                         Room room = rooms.create();
-                        JoinResult seated = rooms.join(room.code(), c.sessionId(), c.name());
-                        replyToJoin(c.sessionId(), seated);
+                        replyToJoin(c.sessionId(),
+                                rooms.join(room.code(), c.sessionId(), null, c.name()));
                     }
-                    case JOIN -> replyToJoin(c.sessionId(), rooms.join(c.roomCode(), c.sessionId(), c.name()));
+                    case JOIN -> replyToJoin(c.sessionId(), rooms.join(
+                            c.roomCode(), c.sessionId(), c.claimedPlayerId(), c.name()));
                     case DISCONNECT -> rooms.disconnect(c.sessionId());
                     default -> {
                         // Not a lobby-level command; the room queue handles it.
@@ -87,9 +88,17 @@ public class GameLoop {
         }
     }
 
+    /**
+     * Answers a join with the room code and the player's stable id. The client
+     * matches that id against SnakeView.id to find its own snake, and sends it
+     * back on a later join to reclaim this seat.
+     */
     private void replyToJoin(String sessionId, JoinResult result) {
         if (result.ok()) {
-            sockets.send(sessionId, "{\"type\":\"joined\",\"room\":\"" + result.room().code() + "\"}");
+            sockets.send(sessionId, "{\"type\":\"joined\",\"room\":\""
+                    + result.room().code() + "\",\"you\":\""
+                    + result.player().playerId() + "\",\"rejoined\":"
+                    + result.rejoined() + "}");
         } else {
             sockets.send(sessionId, switch (result.failure()) {
                 case NO_SUCH_ROOM -> "{\"type\":\"error\",\"message\":\"no such room\"}";
@@ -119,10 +128,10 @@ public class GameLoop {
             try {
                 switch (c.type()) {
                     case TURN -> turn(room, c);
-                    case READY -> room.toggleReady(c.sessionId());
-                    case START -> room.startRound(c.sessionId());
+                    case READY -> room.toggleReady(playerOf(c));
+                    case START -> room.startRound(playerOf(c));
                     case RENAME -> rooms.rename(c.sessionId(), c.name());
-                    case PLAY_AGAIN -> playAgain(room, c.sessionId());
+                    case PLAY_AGAIN -> playAgain(room, playerOf(c));
                     default -> {
                         // Lobby-level commands never reach a room queue.
                     }
@@ -133,8 +142,14 @@ public class GameLoop {
         }
     }
 
+    /** The stable id behind the socket a command arrived on. */
+    private String playerOf(ClientCommand c) {
+        return rooms.playerIdOf(c.sessionId());
+    }
+
     private void turn(Room room, ClientCommand c) {
-        Snake snake = room.snakeOf(c.sessionId());
+        String playerId = playerOf(c);
+        Snake snake = playerId == null ? null : room.snakeOf(playerId);
         // setDirection already refuses a reversal, so a client cannot fold a
         // snake back onto itself by asking.
         if (snake != null && c.direction() != null) {
@@ -143,8 +158,8 @@ public class GameLoop {
     }
 
     /** Only the host takes the room back to the lobby, as with starting. */
-    private void playAgain(Room room, String sessionId) {
-        if (room.phase() == RoomPhase.RESULTS && room.isHost(sessionId)) {
+    private void playAgain(Room room, String playerId) {
+        if (room.phase() == RoomPhase.RESULTS && room.isHost(playerId)) {
             room.returnToLobby();
         }
     }

@@ -130,7 +130,7 @@ class GameSocketHandlerTest {
     void inRoomCommandsGoToThatRoomsQueueOnly() throws Exception {
         Room room = rooms.create();
         Room other = rooms.create();
-        rooms.join(room.code(), "s1", "Ann");
+        rooms.join(room.code(), "s1", null, "Ann");
         WebSocketSession session = openSession("s1");
         handler.afterConnectionEstablished(session);
 

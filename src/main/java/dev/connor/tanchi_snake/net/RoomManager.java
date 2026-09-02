@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Component;
@@ -19,6 +20,10 @@ import dev.connor.tanchi_snake.room.SnakeNameGenerator;
 /**
  * The registry of live rooms: creating them, letting players in and out, and
  * sweeping the ones nobody came back to.
+ *
+ * <p>Two identities are tracked per player. The playerId is stable and keys
+ * their seat and their snake; the sessionId is whichever socket they are on,
+ * and changes every time they reconnect.
  */
 @Component
 public class RoomManager {
@@ -27,7 +32,8 @@ public class RoomManager {
     private static final int CODE_ATTEMPTS = 100;
 
     private final Map<String, Room> rooms = new ConcurrentHashMap<>();
-    private final Map<String, String> roomBySession = new ConcurrentHashMap<>();
+    private final Map<String, String> roomByPlayer = new ConcurrentHashMap<>();
+    private final Map<String, String> playerBySession = new ConcurrentHashMap<>();
     private final RoomCodeGenerator codes;
     private final SnakeNameGenerator names;
     private final Random random;
@@ -78,28 +84,44 @@ public class RoomManager {
         return rooms.values();
     }
 
+    /** The room the socket is in, or null. */
     public Room roomOf(String sessionId) {
-        String code = roomBySession.get(sessionId);
+        String playerId = playerBySession.get(sessionId);
+        return playerId == null ? null : roomOfPlayer(playerId);
+    }
+
+    public Room roomOfPlayer(String playerId) {
+        String code = roomByPlayer.get(playerId);
         return code == null ? null : rooms.get(code);
     }
 
+    /** The stable id behind a socket, or null if it belongs to nobody. */
+    public String playerIdOf(String sessionId) {
+        return playerBySession.get(sessionId);
+    }
+
     /**
-     * Puts a player into a room, or brings a returning one back to the seat
-     * they left. Never throws on bad input: the failure comes back in the
-     * result so the caller can tell the client and carry on.
+     * Seats a player, or brings a returning one back to the seat they left.
+     *
+     * <p>A client that has been here before sends back the playerId it was
+     * given; that, not the socket, is what identifies them, since reconnecting
+     * always means a brand new sessionId.
+     *
+     * <p>Never throws on bad input: the failure comes back in the result so the
+     * caller can tell the client and carry on.
      */
-    public JoinResult join(String code, String sessionId, String name) {
+    public JoinResult join(String code, String sessionId, String claimedPlayerId, String name) {
         Room room = find(code);
         if (room == null) {
             return JoinResult.failed(JoinResult.Failure.NO_SUCH_ROOM);
         }
 
-        Player returning = room.player(sessionId);
+        Player returning = claimedPlayerId == null ? null : room.player(claimedPlayerId);
         if (returning != null) {
-            room.markConnected(sessionId);
-            // They still own the snake that was frozen when they dropped.
-            room.resumeSnake(sessionId);
-            roomBySession.put(sessionId, room.code());
+            room.markConnected(claimedPlayerId, sessionId);
+            // The snake is keyed by playerId, so it is still theirs.
+            room.resumeSnake(claimedPlayerId);
+            bind(sessionId, claimedPlayerId, room.code());
             return JoinResult.rejoined(room, returning);
         }
 
@@ -107,8 +129,8 @@ public class RoomManager {
             return JoinResult.failed(JoinResult.Failure.ROOM_FULL);
         }
 
-        Player seated = room.add(new Player(sessionId, names.normalise(name)));
-        roomBySession.put(sessionId, room.code());
+        Player seated = room.add(new Player(newPlayerId(), sessionId, names.normalise(name)));
+        bind(sessionId, seated.playerId(), room.code());
         // Joining mid-round puts them straight on the board at level 1, with
         // no grace period.
         if (room.phase() == RoomPhase.RUNNING) {
@@ -117,14 +139,27 @@ public class RoomManager {
         return JoinResult.joined(room, seated);
     }
 
+    private String newPlayerId() {
+        return UUID.randomUUID().toString();
+    }
+
+    private void bind(String sessionId, String playerId, String code) {
+        playerBySession.put(sessionId, playerId);
+        roomByPlayer.put(playerId, code);
+    }
+
     /**
      * Marks a player away without giving up their seat, so a mid-round snake
      * can be resumed. Reassigns the host if they were holding it.
      */
     public Room disconnect(String sessionId) {
-        Room room = roomOf(sessionId);
+        String playerId = playerBySession.remove(sessionId);
+        if (playerId == null) {
+            return null;
+        }
+        Room room = roomOfPlayer(playerId);
         if (room != null) {
-            room.markDisconnected(sessionId, clock.millis());
+            room.markDisconnected(playerId, clock.millis());
             // Freeze right away rather than waiting for the next tick.
             room.holdDisconnectedSnakes();
         }
@@ -133,11 +168,15 @@ public class RoomManager {
 
     /** Removes a player for good, e.g. once their reconnect window lapses. */
     public Room leave(String sessionId) {
-        Room room = roomOf(sessionId);
-        if (room != null) {
-            room.remove(sessionId, clock.millis());
+        String playerId = playerBySession.remove(sessionId);
+        if (playerId == null) {
+            return null;
         }
-        roomBySession.remove(sessionId);
+        Room room = roomOfPlayer(playerId);
+        if (room != null) {
+            room.remove(playerId, clock.millis());
+        }
+        roomByPlayer.remove(playerId);
         return room;
     }
 
@@ -147,7 +186,7 @@ public class RoomManager {
         if (room == null) {
             return null;
         }
-        Player p = room.player(sessionId);
+        Player p = room.player(playerBySession.get(sessionId));
         if (p == null) {
             return null;
         }
@@ -166,7 +205,11 @@ public class RoomManager {
         for (Room room : rooms.values()) {
             if (room.isExpired(now)) {
                 rooms.remove(room.code());
-                roomBySession.values().removeIf(code -> code.equals(room.code()));
+                for (String playerId : room.playerIds()) {
+                    playerBySession.values().removeIf(playerId::equals);
+                }
+                // Catches any mapping left behind by a seat already given up.
+                roomByPlayer.values().removeIf(code -> code.equals(room.code()));
                 destroyed.add(room.code());
             }
         }

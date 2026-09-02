@@ -61,7 +61,7 @@ public class Room {
      */
     private final Queue<ClientCommand> inbox = new ConcurrentLinkedQueue<>();
 
-    private String hostSessionId;
+    private String hostPlayerId;
     private RoomPhase phase = RoomPhase.LOBBY;
 
     /** When the room last went empty, or NOT_EMPTY while somebody is here. */
@@ -98,12 +98,12 @@ public class Room {
         this.phase = phase;
     }
 
-    public String hostSessionId() {
-        return hostSessionId;
+    public String hostPlayerId() {
+        return hostPlayerId;
     }
 
-    public boolean isHost(String sessionId) {
-        return hostSessionId != null && hostSessionId.equals(sessionId);
+    public boolean isHost(String playerId) {
+        return hostPlayerId != null && hostPlayerId.equals(playerId);
     }
 
     /** Players in join order, connected or not. */
@@ -111,8 +111,18 @@ public class Room {
         return Collections.unmodifiableCollection(players.values());
     }
 
-    public Player player(String sessionId) {
-        return players.get(sessionId);
+    public Player player(String playerId) {
+        return players.get(playerId);
+    }
+
+    /** Finds the seat currently bound to a socket, or null. */
+    public Player playerBySession(String sessionId) {
+        for (Player p : players.values()) {
+            if (sessionId.equals(p.sessionId())) {
+                return p;
+            }
+        }
+        return null;
     }
 
     public int size() {
@@ -136,19 +146,19 @@ public class Room {
         if (isFull()) {
             return null;
         }
-        players.put(p.sessionId(), p);
-        if (hostSessionId == null) {
-            hostSessionId = p.sessionId();
+        players.put(p.playerId(), p);
+        if (hostPlayerId == null) {
+            hostPlayerId = p.playerId();
         }
         emptySinceMillis = NOT_EMPTY;
         return p;
     }
 
     /** Drops a player for good. Contrast with {@link #markDisconnected}. */
-    public Player remove(String sessionId, long nowMillis) {
-        Player gone = players.remove(sessionId);
+    public Player remove(String playerId, long nowMillis) {
+        Player gone = players.remove(playerId);
         if (gone != null) {
-            afterLeaving(sessionId, nowMillis);
+            afterLeaving(playerId, nowMillis);
         }
         return gone;
     }
@@ -157,30 +167,32 @@ public class Room {
      * Keeps the player's seat but marks them away, so a mid-round snake can be
      * frozen and picked back up if they return.
      */
-    public Player markDisconnected(String sessionId, long nowMillis) {
-        Player p = players.get(sessionId);
+    public Player markDisconnected(String playerId, long nowMillis) {
+        Player p = players.get(playerId);
         if (p == null) {
             return null;
         }
         p.markDisconnected(nowMillis);
-        afterLeaving(sessionId, nowMillis);
+        afterLeaving(playerId, nowMillis);
         return p;
     }
 
-    public Player markConnected(String sessionId) {
-        Player p = players.get(sessionId);
+    /** Brings a player back, on whatever socket they reconnected with. */
+    public Player markConnected(String playerId, String sessionId) {
+        Player p = players.get(playerId);
         if (p != null) {
+            p.bindSession(sessionId);
             p.markConnected();
             emptySinceMillis = NOT_EMPTY;
-            if (hostSessionId == null) {
-                hostSessionId = sessionId;
+            if (hostPlayerId == null) {
+                hostPlayerId = playerId;
             }
         }
         return p;
     }
 
-    private void afterLeaving(String sessionId, long nowMillis) {
-        if (sessionId.equals(hostSessionId)) {
+    private void afterLeaving(String playerId, long nowMillis) {
+        if (playerId.equals(hostPlayerId)) {
             reassignHost();
         }
         if (connectedCount() == 0 && emptySinceMillis == NOT_EMPTY) {
@@ -190,10 +202,10 @@ public class Room {
 
     /** Hands the room to the next connected player in join order. */
     private void reassignHost() {
-        hostSessionId = null;
+        hostPlayerId = null;
         for (Player p : players.values()) {
             if (p.isConnected()) {
-                hostSessionId = p.sessionId();
+                hostPlayerId = p.playerId();
                 return;
             }
         }
@@ -227,8 +239,19 @@ public class Room {
         return inbox.size();
     }
 
-    /** Session ids in join order, for broadcasting to just this room. */
+    /** The sockets this room's players are on, for broadcasting to just them. */
     public List<String> sessionIds() {
+        List<String> ids = new ArrayList<>(players.size());
+        for (Player p : players.values()) {
+            if (p.sessionId() != null) {
+                ids.add(p.sessionId());
+            }
+        }
+        return ids;
+    }
+
+    /** Player ids in join order. */
+    public List<String> playerIds() {
         return new ArrayList<>(players.keySet());
     }
 
@@ -248,8 +271,8 @@ public class Room {
         return any;
     }
 
-    public boolean toggleReady(String sessionId) {
-        Player p = players.get(sessionId);
+    public boolean toggleReady(String playerId) {
+        Player p = players.get(playerId);
         if (p == null || phase != RoomPhase.LOBBY) {
             return false;
         }
@@ -266,8 +289,8 @@ public class Room {
      * @return false if the caller is not the host, or the room is not in a
      *         lobby to start from
      */
-    public boolean startRound(String sessionId) {
-        if (!isHost(sessionId) || phase != RoomPhase.LOBBY) {
+    public boolean startRound(String playerId) {
+        if (!isHost(playerId) || phase != RoomPhase.LOBBY) {
             return false;
         }
         for (Player p : players.values()) {
@@ -287,17 +310,18 @@ public class Room {
      * @return the snake, or null if the board had no room for it
      */
     public Snake spawnSnakeFor(Player p) {
-        if (snakeOf(p.sessionId()) != null) {
+        if (snakeOf(p.playerId()) != null) {
             return null;
         }
         Direction facing = Direction.values()[random.nextInt(Direction.values().length)];
-        return engine.spawnSnake(state, p.sessionId(), facing);
+        // Keyed by the stable id, so the snake outlives the socket.
+        return engine.spawnSnake(state, p.playerId(), facing);
     }
 
     /** The snake belonging to a player, or null if they have none on the board. */
-    public Snake snakeOf(String sessionId) {
+    public Snake snakeOf(String playerId) {
         for (Snake s : state.snakes()) {
-            if (s.id().equals(sessionId)) {
+            if (s.id().equals(playerId)) {
                 return s;
             }
         }
@@ -315,7 +339,7 @@ public class Room {
     public void holdDisconnectedSnakes() {
         for (Player p : players.values()) {
             if (!p.isConnected()) {
-                Snake s = snakeOf(p.sessionId());
+                Snake s = snakeOf(p.playerId());
                 if (s != null) {
                     s.stun(FREEZE_STUN_TICKS);
                 }
@@ -324,8 +348,8 @@ public class Room {
     }
 
     /** Hands a returning player their snake back, unfrozen. */
-    public void resumeSnake(String sessionId) {
-        Snake s = snakeOf(sessionId);
+    public void resumeSnake(String playerId) {
+        Snake s = snakeOf(playerId);
         if (s != null) {
             s.stun(0);
         }
@@ -346,13 +370,13 @@ public class Room {
             if (nowMillis - p.disconnectedAtMillis() < DISCONNECT_GRACE_MILLIS) {
                 continue;
             }
-            Snake s = snakeOf(p.sessionId());
+            Snake s = snakeOf(p.playerId());
             if (s != null) {
                 p.rememberStanding(s.level(), s.levelReachedTick());
-                state.removeSnake(p.sessionId());
+                state.removeSnake(p.playerId());
             }
-            remove(p.sessionId(), nowMillis);
-            dropped.add(p.sessionId());
+            remove(p.playerId(), nowMillis);
+            dropped.add(p.playerId());
         }
         return dropped;
     }
@@ -394,7 +418,7 @@ public class Room {
 
         List<Row> rows = new ArrayList<>();
         for (Player p : players.values()) {
-            Snake s = snakeOf(p.sessionId());
+            Snake s = snakeOf(p.playerId());
             rows.add(s != null
                     ? new Row(p, s.level(), s.levelReachedTick())
                     : new Row(p, p.lastKnownLevel(), p.lastKnownLevelTick()));
@@ -403,7 +427,7 @@ public class Room {
         rows.sort(Comparator
                 .comparingInt(Row::level).reversed()
                 .thenComparingInt(Row::levelTick)
-                .thenComparing(r -> r.player().sessionId()));
+                .thenComparing(r -> r.player().playerId()));
 
         List<Standing> table = new ArrayList<>(rows.size());
         for (int i = 0; i < rows.size(); i++) {
@@ -411,7 +435,7 @@ public class Room {
             int rank = i + 1;
             table.add(new Standing(
                     rank,
-                    r.player().sessionId(),
+                    r.player().playerId(),
                     r.player().name(),
                     r.level(),
                     r.levelTick(),

@@ -15,7 +15,7 @@ class RoomStandingsTest {
     private static Room startedRoom(String... sessionIds) {
         Room room = new Room("ABCD", new Random(23));
         for (String id : sessionIds) {
-            room.add(new Player(id, "name-" + id));
+            room.add(new Player(id, id, "name-" + id));
         }
         room.startRound(sessionIds[0]);
         return room;
@@ -158,8 +158,8 @@ class RoomStandingsTest {
     @Test
     void namesRideAlongForTheResultsScreen() {
         Room room = new Room("ABCD", new Random(23));
-        room.add(new Player("s1", "Ann"));
-        room.add(new Player("s2", "Sleepy Green Snake"));
+        room.add(new Player("s1", "s1", "Ann"));
+        room.add(new Player("s2", "s2", "Sleepy Green Snake"));
         room.startRound("s1");
         place(room, "s1", 2, 10);
         place(room, "s2", 5, 10);
@@ -178,8 +178,8 @@ class RoomStandingsTest {
     @Test
     void lobbyPlayersWithNoSnakeRankAtLevelZero() {
         Room room = new Room("ABCD", new Random(23));
-        room.add(new Player("s1", "Ann"));
-        room.add(new Player("s2", "Bo"));
+        room.add(new Player("s1", "s1", "Ann"));
+        room.add(new Player("s2", "s2", "Bo"));
 
         List<Standing> table = room.standings();
 

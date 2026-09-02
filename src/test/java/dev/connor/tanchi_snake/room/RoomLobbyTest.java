@@ -17,7 +17,7 @@ class RoomLobbyTest {
     }
 
     private static Player seat(Room room, String id, String name) {
-        return room.add(new Player(id, name));
+        return room.add(new Player(id, id, name));
     }
 
     // --- ready flags ---
@@ -195,7 +195,7 @@ class RoomLobbyTest {
 
         room.markDisconnected("s2", 0);
         room.holdDisconnectedSnakes();
-        room.markConnected("s2");
+        room.markConnected("s2", "s2");
         room.resumeSnake("s2");
 
         assertSame(before, room.snakeOf("s2"), "same snake, not a new one");

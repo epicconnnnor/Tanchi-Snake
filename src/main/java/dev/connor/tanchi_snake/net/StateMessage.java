@@ -21,7 +21,7 @@ public record StateMessage(
         int tick,
         int width,
         int height,
-        String hostSessionId,
+        String hostPlayerId,
         String winnerSessionId,
         List<SnakeView> snakes,
         List<PointView> food,
@@ -42,7 +42,7 @@ public record StateMessage(
     }
 
     public record PlayerView(
-            String sessionId,
+            String playerId,
             String name,
             boolean ready,
             boolean connected,
@@ -70,11 +70,11 @@ public record StateMessage(
         List<PlayerView> players = new ArrayList<>();
         for (Player p : room.players()) {
             players.add(new PlayerView(
-                    p.sessionId(),
+                    p.playerId(),
                     p.name(),
                     p.isReady(),
                     p.isConnected(),
-                    room.isHost(p.sessionId())));
+                    room.isHost(p.playerId())));
         }
 
         Snake winner = room.state().winner();
@@ -86,7 +86,7 @@ public record StateMessage(
                 room.state().tick(),
                 room.state().width(),
                 room.state().height(),
-                room.hostSessionId(),
+                room.hostPlayerId(),
                 winner == null ? null : winner.id(),
                 snakes,
                 points(room.state().food()),

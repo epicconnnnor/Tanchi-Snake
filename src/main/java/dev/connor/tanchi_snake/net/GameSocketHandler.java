@@ -131,9 +131,11 @@ public class GameSocketHandler extends TextWebSocketHandler {
         String code = text(fields, "room");
         // The room may still not exist; that is the loop's problem, not ours.
         // Here we only insist there is something to look up.
+        // "you" is echoed back from a previous joined message; absent for a
+        // first-time join, which is when a new id gets minted.
         return code == null || code.isBlank()
                 ? null
-                : ClientCommand.join(sessionId, code, text(fields, "name"));
+                : ClientCommand.join(sessionId, code, text(fields, "name"), text(fields, "you"));
     }
 
     private ClientCommand turnOrNull(String sessionId, Map<?, ?> fields) {

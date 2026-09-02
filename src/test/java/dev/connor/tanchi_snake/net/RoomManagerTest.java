@@ -11,6 +11,7 @@ import java.util.Random;
 
 import org.junit.jupiter.api.Test;
 
+import dev.connor.tanchi_snake.room.Player;
 import dev.connor.tanchi_snake.room.Room;
 import dev.connor.tanchi_snake.room.RoomCodeGenerator;
 
@@ -53,6 +54,12 @@ class RoomManagerTest {
         return new RoomManager(new Random(5), clock);
     }
 
+    /** The stable id minted for whoever is on this socket. */
+    private static String pid(Room room, String sessionId) {
+        Player p = room.playerBySession(sessionId);
+        return p == null ? null : p.playerId();
+    }
+
     // --- creation ---
 
     @Test
@@ -90,7 +97,7 @@ class RoomManagerTest {
     @Test
     void joiningAnUnknownRoomFailsWithoutThrowing() {
         RoomManager rm = manager(new TestClock(0));
-        JoinResult result = rm.join("ZZZZ", "s1", "Ann");
+        JoinResult result = rm.join("ZZZZ", "s1", null, "Ann");
 
         assertFalse(result.ok());
         assertEquals(JoinResult.Failure.NO_SUCH_ROOM, result.failure());
@@ -102,11 +109,11 @@ class RoomManagerTest {
         RoomManager rm = manager(new TestClock(0));
         Room room = rm.create();
 
-        rm.join(room.code(), "s1", "Ann");
-        rm.join(room.code(), "s2", "Bo");
+        rm.join(room.code(), "s1", null, "Ann");
+        rm.join(room.code(), "s2", null, "Bo");
 
-        assertTrue(room.isHost("s1"));
-        assertFalse(room.isHost("s2"));
+        assertTrue(room.isHost(pid(room, "s1")));
+        assertFalse(room.isHost(pid(room, "s2")));
         assertEquals(2, room.size());
     }
 
@@ -116,11 +123,11 @@ class RoomManagerTest {
         Room room = rm.create();
 
         for (int i = 0; i < Room.MAX_PLAYERS; i++) {
-            assertTrue(rm.join(room.code(), "s" + i, "p" + i).ok());
+            assertTrue(rm.join(room.code(), "s" + i, null, "p" + i).ok());
         }
         assertTrue(room.isFull());
 
-        JoinResult overflow = rm.join(room.code(), "extra", "late");
+        JoinResult overflow = rm.join(room.code(), "extra", null, "late");
         assertFalse(overflow.ok());
         assertEquals(JoinResult.Failure.ROOM_FULL, overflow.failure());
         assertEquals(Room.MAX_PLAYERS, room.size());
@@ -130,13 +137,13 @@ class RoomManagerTest {
     void leavingReleasesTheSeat() {
         RoomManager rm = manager(new TestClock(0));
         Room room = rm.create();
-        rm.join(room.code(), "s1", "Ann");
-        rm.join(room.code(), "s2", "Bo");
+        rm.join(room.code(), "s1", null, "Ann");
+        rm.join(room.code(), "s2", null, "Bo");
 
         rm.leave("s1");
 
         assertEquals(1, room.size());
-        assertNull(room.player("s1"));
+        assertNull(room.playerBySession("s1"));
         assertNull(rm.roomOf("s1"));
     }
 
@@ -144,18 +151,19 @@ class RoomManagerTest {
     void disconnectKeepsTheSeatAndReconnectResumesIt() {
         RoomManager rm = manager(new TestClock(1_000));
         Room room = rm.create();
-        rm.join(room.code(), "s1", "Ann");
+        String was = rm.join(room.code(), "s1", null, "Ann").player().playerId();
 
         rm.disconnect("s1");
         assertEquals(1, room.size(), "seat is held for a return");
-        assertFalse(room.player("s1").isConnected());
-        assertEquals(1_000, room.player("s1").disconnectedAtMillis());
+        assertFalse(room.player(was).isConnected());
+        assertEquals(1_000, room.player(was).disconnectedAtMillis());
 
-        JoinResult back = rm.join(room.code(), "s1", "Ann");
+        JoinResult back = rm.join(room.code(), "s1-again", was, "Ann");
         assertTrue(back.ok());
         assertTrue(back.rejoined());
-        assertTrue(room.player("s1").isConnected());
+        assertTrue(room.player(was).isConnected());
         assertEquals(1, room.size());
+        assertEquals("s1-again", room.player(was).sessionId(), "rebound to the new socket");
     }
 
     // --- host reassignment ---
@@ -164,66 +172,66 @@ class RoomManagerTest {
     void hostPassesToTheNextPlayerInJoinOrder() {
         RoomManager rm = manager(new TestClock(0));
         Room room = rm.create();
-        rm.join(room.code(), "s1", "Ann");
-        rm.join(room.code(), "s2", "Bo");
-        rm.join(room.code(), "s3", "Cy");
+        rm.join(room.code(), "s1", null, "Ann");
+        rm.join(room.code(), "s2", null, "Bo");
+        rm.join(room.code(), "s3", null, "Cy");
 
         rm.disconnect("s1");
 
-        assertTrue(room.isHost("s2"), "second to join takes over");
+        assertTrue(room.isHost(pid(room, "s2")), "second to join takes over");
     }
 
     @Test
     void hostSkipsPlayersWhoAreAlsoAway() {
         RoomManager rm = manager(new TestClock(0));
         Room room = rm.create();
-        rm.join(room.code(), "s1", "Ann");
-        rm.join(room.code(), "s2", "Bo");
-        rm.join(room.code(), "s3", "Cy");
+        rm.join(room.code(), "s1", null, "Ann");
+        rm.join(room.code(), "s2", null, "Bo");
+        rm.join(room.code(), "s3", null, "Cy");
 
         rm.disconnect("s2");
         rm.disconnect("s1");
 
-        assertTrue(room.isHost("s3"), "s2 is away, so it falls through to s3");
+        assertTrue(room.isHost(pid(room, "s3")), "s2 is away, so it falls through to s3");
     }
 
     @Test
     void hostReassignmentFollowsJoinOrderNotLeaveOrder() {
         RoomManager rm = manager(new TestClock(0));
         Room room = rm.create();
-        rm.join(room.code(), "s1", "Ann");
-        rm.join(room.code(), "s2", "Bo");
-        rm.join(room.code(), "s3", "Cy");
+        rm.join(room.code(), "s1", null, "Ann");
+        rm.join(room.code(), "s2", null, "Bo");
+        rm.join(room.code(), "s3", null, "Cy");
 
         rm.leave("s2");
         rm.leave("s1");
 
-        assertTrue(room.isHost("s3"));
+        assertTrue(room.isHost(pid(room, "s3")));
     }
 
     @Test
     void lastPlayerLeavingLeavesNoHost() {
         RoomManager rm = manager(new TestClock(0));
         Room room = rm.create();
-        rm.join(room.code(), "s1", "Ann");
+        rm.join(room.code(), "s1", null, "Ann");
 
         rm.disconnect("s1");
 
-        assertNull(room.hostSessionId());
-        assertFalse(room.isHost("s1"));
+        assertNull(room.hostPlayerId());
+        assertFalse(room.isHost(pid(room, "s1")));
     }
 
     @Test
     void aReturningPlayerTakesTheHostSeatIfNobodyHoldsIt() {
         RoomManager rm = manager(new TestClock(0));
         Room room = rm.create();
-        rm.join(room.code(), "s1", "Ann");
+        String was = rm.join(room.code(), "s1", null, "Ann").player().playerId();
         rm.disconnect("s1");
-        assertNull(room.hostSessionId());
+        assertNull(room.hostPlayerId());
 
-        rm.join(room.code(), "s1", "Ann");
+        rm.join(room.code(), "s1-again", was, "Ann");
 
-        assertTrue(room.isHost("s1"));
+        assertTrue(room.isHost(was));
     }
 
     // --- destruction timer ---
@@ -233,7 +241,7 @@ class RoomManagerTest {
         TestClock clock = new TestClock(0);
         RoomManager rm = manager(clock);
         Room room = rm.create();
-        rm.join(room.code(), "s1", "Ann");
+        rm.join(room.code(), "s1", null, "Ann");
         rm.disconnect("s1");
 
         clock.advance(Room.EMPTY_TTL_MILLIS - 1);
@@ -247,7 +255,7 @@ class RoomManagerTest {
         TestClock clock = new TestClock(0);
         RoomManager rm = manager(clock);
         Room room = rm.create();
-        rm.join(room.code(), "s1", "Ann");
+        rm.join(room.code(), "s1", null, "Ann");
         rm.disconnect("s1");
 
         clock.advance(Room.EMPTY_TTL_MILLIS);
@@ -255,6 +263,7 @@ class RoomManagerTest {
         assertEquals(List.of(room.code()), rm.sweepEmptyRooms());
         assertNull(rm.find(room.code()));
         assertNull(rm.roomOf("s1"));
+        assertNull(rm.playerIdOf("s1"));
     }
 
     @Test
@@ -262,8 +271,8 @@ class RoomManagerTest {
         TestClock clock = new TestClock(0);
         RoomManager rm = manager(clock);
         Room room = rm.create();
-        rm.join(room.code(), "s1", "Ann");
-        rm.join(room.code(), "s2", "Bo");
+        rm.join(room.code(), "s1", null, "Ann");
+        rm.join(room.code(), "s2", null, "Bo");
         rm.disconnect("s1");
 
         clock.advance(Room.EMPTY_TTL_MILLIS * 10);
@@ -277,11 +286,11 @@ class RoomManagerTest {
         TestClock clock = new TestClock(0);
         RoomManager rm = manager(clock);
         Room room = rm.create();
-        rm.join(room.code(), "s1", "Ann");
+        rm.join(room.code(), "s1", null, "Ann");
         rm.disconnect("s1");
 
         clock.advance(Room.EMPTY_TTL_MILLIS - 1);
-        rm.join(room.code(), "s1", "Ann");
+        rm.join(room.code(), "s1-again", pid(room, "s1"), "Ann");
         clock.advance(Room.EMPTY_TTL_MILLIS * 5);
 
         assertTrue(rm.sweepEmptyRooms().isEmpty());
@@ -293,8 +302,8 @@ class RoomManagerTest {
         TestClock clock = new TestClock(0);
         RoomManager rm = manager(clock);
         Room room = rm.create();
-        rm.join(room.code(), "s1", "Ann");
-        rm.join(room.code(), "s2", "Bo");
+        rm.join(room.code(), "s1", null, "Ann");
+        rm.join(room.code(), "s2", null, "Bo");
 
         rm.disconnect("s1");
         clock.advance(Room.EMPTY_TTL_MILLIS - 1);
@@ -312,16 +321,16 @@ class RoomManagerTest {
         TestClock clock = new TestClock(0);
         RoomManager rm = manager(clock);
         Room room = rm.create();
-        rm.join(room.code(), "s1", "Ann");
+        rm.join(room.code(), "s1", null, "Ann");
         String code = room.code();
         rm.disconnect("s1");
         clock.advance(Room.EMPTY_TTL_MILLIS);
         rm.sweepEmptyRooms();
 
-        assertFalse(rm.join(code, "s1", "Ann").ok(), "no state survives the teardown");
+        assertFalse(rm.join(code, "s1", null, "Ann").ok(), "no state survives the teardown");
 
         Room fresh = rm.create();
-        assertTrue(rm.join(fresh.code(), "s1", "Ann").ok());
+        assertTrue(rm.join(fresh.code(), "s1", null, "Ann").ok());
         assertNotSame(room, fresh);
         assertEquals(1, fresh.size());
     }

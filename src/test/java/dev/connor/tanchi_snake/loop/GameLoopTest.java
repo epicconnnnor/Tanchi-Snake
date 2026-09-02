@@ -79,6 +79,12 @@ class GameLoopTest {
      * Registers through the real connection path, so the session the loop
      * broadcasts to is wrapped exactly as it would be in production.
      */
+    /** The stable id minted for whoever is on this socket. */
+    private static String pid(Room room, String sessionId) {
+        var p = room.playerBySession(sessionId);
+        return p == null ? null : p.playerId();
+    }
+
     private WebSocketSession attach(String id) {
         WebSocketSession session = mock(WebSocketSession.class);
         when(session.getId()).thenReturn(id);
@@ -99,8 +105,8 @@ class GameLoopTest {
         assertEquals(1, rooms.rooms().size());
         Room room = rooms.roomOf("s1");
         assertNotNull(room);
-        assertTrue(room.isHost("s1"));
-        assertEquals("Ann", room.player("s1").name());
+        assertTrue(room.isHost(pid(room, "s1")));
+        assertEquals("Ann", room.playerBySession("s1").name());
     }
 
     @Test
@@ -110,7 +116,7 @@ class GameLoopTest {
 
         loop.tick();
 
-        assertTrue(rooms.roomOf("s1").player("s1").name().endsWith(" Snake"));
+        assertTrue(rooms.roomOf("s1").playerBySession("s1").name().endsWith(" Snake"));
     }
 
     @Test
@@ -128,7 +134,7 @@ class GameLoopTest {
     void aFullRoomTurnsExtraPlayersAway() {
         Room room = rooms.create();
         for (int i = 0; i < Room.MAX_PLAYERS; i++) {
-            rooms.join(room.code(), "p" + i, "p" + i);
+            rooms.join(room.code(), "p" + i, null, "p" + i);
         }
         attach("late");
         bus.submit(ClientCommand.join("late", room.code(), "Late"));
@@ -144,9 +150,9 @@ class GameLoopTest {
     @Test
     void turnCommandsChangeTheSnakeDirection() {
         Room room = rooms.create();
-        rooms.join(room.code(), "s1", "Ann");
-        room.startRound("s1");
-        Snake snake = room.snakeOf("s1");
+        rooms.join(room.code(), "s1", null, "Ann");
+        room.startRound(pid(room, "s1"));
+        Snake snake = room.snakeOf(pid(room, "s1"));
         Direction turnTo = perpendicularTo(snake.direction());
 
         room.enqueue(ClientCommand.turn("s1", turnTo));
@@ -165,7 +171,7 @@ class GameLoopTest {
     @Test
     void aTurnFromSomeoneWithNoSnakeIsIgnored() {
         Room room = rooms.create();
-        rooms.join(room.code(), "s1", "Ann");
+        rooms.join(room.code(), "s1", null, "Ann");
 
         room.enqueue(ClientCommand.turn("ghost", Direction.UP));
 
@@ -175,14 +181,14 @@ class GameLoopTest {
     @Test
     void readyAndStartFlowThroughTheQueue() {
         Room room = rooms.create();
-        rooms.join(room.code(), "s1", "Ann");
-        rooms.join(room.code(), "s2", "Bo");
+        rooms.join(room.code(), "s1", null, "Ann");
+        rooms.join(room.code(), "s2", null, "Bo");
 
         room.enqueue(ClientCommand.ready("s1"));
         room.enqueue(ClientCommand.start("s2"));
         loop.tick();
 
-        assertTrue(room.player("s1").isReady());
+        assertTrue(room.playerBySession("s1").isReady());
         assertEquals(RoomPhase.LOBBY, room.phase(), "s2 is not the host");
 
         room.enqueue(ClientCommand.start("s1"));
@@ -194,10 +200,10 @@ class GameLoopTest {
     @Test
     void onlyTheHostTakesTheRoomBackToTheLobby() {
         Room room = rooms.create();
-        rooms.join(room.code(), "s1", "Ann");
-        rooms.join(room.code(), "s2", "Bo");
-        room.startRound("s1");
-        room.state().setWinner(room.snakeOf("s1"));
+        rooms.join(room.code(), "s1", null, "Ann");
+        rooms.join(room.code(), "s2", null, "Bo");
+        room.startRound(pid(room, "s1"));
+        room.state().setWinner(room.snakeOf(pid(room, "s1")));
         room.finishIfWon();
 
         room.enqueue(ClientCommand.playAgain("s2"));
@@ -214,10 +220,10 @@ class GameLoopTest {
     @Test
     void onlyRunningRoomsAdvance() {
         Room lobby = rooms.create();
-        rooms.join(lobby.code(), "s1", "Ann");
+        rooms.join(lobby.code(), "s1", null, "Ann");
         Room running = rooms.create();
-        rooms.join(running.code(), "s2", "Bo");
-        running.startRound("s2");
+        rooms.join(running.code(), "s2", null, "Bo");
+        running.startRound(pid(running, "s2"));
 
         loop.tick();
 
@@ -228,10 +234,10 @@ class GameLoopTest {
     @Test
     void roomsAdvanceIndependently() {
         Room a = rooms.create();
-        rooms.join(a.code(), "s1", "Ann");
-        a.startRound("s1");
+        rooms.join(a.code(), "s1", null, "Ann");
+        a.startRound(pid(a, "s1"));
         Room b = rooms.create();
-        rooms.join(b.code(), "s2", "Bo");
+        rooms.join(b.code(), "s2", null, "Bo");
 
         loop.tick();
         loop.tick();
@@ -243,9 +249,9 @@ class GameLoopTest {
     @Test
     void aRoundThatIsWonMovesToResultsAndStopsAdvancing() {
         Room room = rooms.create();
-        rooms.join(room.code(), "s1", "Ann");
-        room.startRound("s1");
-        room.state().setWinner(room.snakeOf("s1"));
+        rooms.join(room.code(), "s1", null, "Ann");
+        room.startRound(pid(room, "s1"));
+        room.state().setWinner(room.snakeOf(pid(room, "s1")));
 
         loop.tick();
         assertEquals(RoomPhase.RESULTS, room.phase());
@@ -260,9 +266,9 @@ class GameLoopTest {
     @Test
     void stateGoesOnlyToTheRoomsOwnSessions() throws Exception {
         Room a = rooms.create();
-        rooms.join(a.code(), "s1", "Ann");
+        rooms.join(a.code(), "s1", null, "Ann");
         Room b = rooms.create();
-        rooms.join(b.code(), "s2", "Bo");
+        rooms.join(b.code(), "s2", null, "Bo");
         WebSocketSession inA = attach("s1");
         WebSocketSession inB = attach("s2");
         WebSocketSession outsider = attach("s3");
@@ -277,8 +283,8 @@ class GameLoopTest {
     @Test
     void theBroadcastIsWellFormedJsonCarryingTheBoard() throws Exception {
         Room room = rooms.create();
-        rooms.join(room.code(), "s1", "Ann");
-        room.startRound("s1");
+        rooms.join(room.code(), "s1", null, "Ann");
+        room.startRound(pid(room, "s1"));
         WebSocketSession session = attach("s1");
 
         loop.tick();
@@ -307,14 +313,14 @@ class GameLoopTest {
     @Test
     void standingsRideAlongOnlyOnTheResultsScreen() throws Exception {
         Room room = rooms.create();
-        rooms.join(room.code(), "s1", "Ann");
-        room.startRound("s1");
+        rooms.join(room.code(), "s1", null, "Ann");
+        room.startRound(pid(room, "s1"));
         WebSocketSession session = attach("s1");
 
         loop.tick();
         assertTrue(captureMessages(session).get(0).contains("\"standings\":[]"));
 
-        room.state().setWinner(room.snakeOf("s1"));
+        room.state().setWinner(room.snakeOf(pid(room, "s1")));
         loop.tick();
 
         String last = captureMessages(session).stream().reduce((a, b) -> b).orElseThrow();
@@ -327,28 +333,28 @@ class GameLoopTest {
     @Test
     void aDisconnectFreezesTheSnakeAndLaterRemovesIt() {
         Room room = rooms.create();
-        rooms.join(room.code(), "s1", "Ann");
-        rooms.join(room.code(), "s2", "Bo");
-        room.startRound("s1");
+        rooms.join(room.code(), "s1", null, "Ann");
+        rooms.join(room.code(), "s2", null, "Bo");
+        room.startRound(pid(room, "s1"));
 
         bus.submit(ClientCommand.disconnect("s2"));
         loop.tick();
 
-        Snake frozen = room.snakeOf("s2");
+        Snake frozen = room.snakeOf(pid(room, "s2"));
         assertNotNull(frozen, "still on the board during the window");
         assertTrue(frozen.stunTicks() > 0, "and frozen, so it stays lethal");
 
         clock.advance(Room.DISCONNECT_GRACE_MILLIS);
         loop.tick();
 
-        assertNull(room.snakeOf("s2"), "gone once the window lapses");
-        assertNull(room.player("s2"));
+        assertNull(room.snakeOf(pid(room, "s2")), "gone once the window lapses");
+        assertNull(room.playerBySession("s2"));
     }
 
     @Test
     void emptyRoomsAreSweptByTheLoop() {
         Room room = rooms.create();
-        rooms.join(room.code(), "s1", "Ann");
+        rooms.join(room.code(), "s1", null, "Ann");
         bus.submit(ClientCommand.disconnect("s1"));
         loop.tick();
         assertNotNull(rooms.find(room.code()));
@@ -362,8 +368,8 @@ class GameLoopTest {
     @Test
     void theLoopSurvivesARoomWithNoSessionsAttached() {
         Room room = rooms.create();
-        rooms.join(room.code(), "s1", "Ann");
-        room.startRound("s1");
+        rooms.join(room.code(), "s1", null, "Ann");
+        room.startRound(pid(room, "s1"));
 
         assertDoesNotThrow(loop::tick);
         assertEquals(1, room.state().tick());
@@ -372,14 +378,14 @@ class GameLoopTest {
     @Test
     void aFailingSocketDoesNotStopOtherRoomsFromTicking() throws Exception {
         Room bad = rooms.create();
-        rooms.join(bad.code(), "s1", "Ann");
-        bad.startRound("s1");
+        rooms.join(bad.code(), "s1", null, "Ann");
+        bad.startRound(pid(bad, "s1"));
         WebSocketSession broken = attach("s1");
         doThrow(new java.io.IOException("gone")).when(broken).sendMessage(any(TextMessage.class));
 
         Room good = rooms.create();
-        rooms.join(good.code(), "s2", "Bo");
-        good.startRound("s2");
+        rooms.join(good.code(), "s2", null, "Bo");
+        good.startRound(pid(good, "s2"));
 
         assertDoesNotThrow(loop::tick);
         assertEquals(1, good.state().tick());
