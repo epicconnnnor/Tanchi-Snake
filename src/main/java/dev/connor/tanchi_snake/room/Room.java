@@ -7,7 +7,9 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Random;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import dev.connor.tanchi_snake.game.Direction;
 import dev.connor.tanchi_snake.game.GameEngine;
@@ -51,6 +53,13 @@ public class Room {
     private final Random random;
     /** Insertion ordered, which is what makes "next in join order" meaningful. */
     private final Map<String, Player> players = new LinkedHashMap<>();
+
+    /**
+     * Input from this room's players, filled by socket threads and emptied by
+     * the scheduler thread. The queue is the whole handover: nothing else in
+     * this class is safe to touch from a socket thread.
+     */
+    private final Queue<ClientCommand> inbox = new ConcurrentLinkedQueue<>();
 
     private String hostSessionId;
     private RoomPhase phase = RoomPhase.LOBBY;
@@ -196,6 +205,26 @@ public class Room {
 
     public boolean isExpired(long nowMillis) {
         return emptySinceMillis != NOT_EMPTY && nowMillis - emptySinceMillis >= EMPTY_TTL_MILLIS;
+    }
+
+    /** Safe to call from any thread; everything else here is not. */
+    public void enqueue(ClientCommand command) {
+        if (command != null) {
+            inbox.add(command);
+        }
+    }
+
+    /** Empties the inbox for the scheduler thread to work through. */
+    public List<ClientCommand> drainInbox() {
+        List<ClientCommand> taken = new ArrayList<>();
+        for (ClientCommand c = inbox.poll(); c != null; c = inbox.poll()) {
+            taken.add(c);
+        }
+        return taken;
+    }
+
+    public int inboxSize() {
+        return inbox.size();
     }
 
     /** Session ids in join order, for broadcasting to just this room. */
