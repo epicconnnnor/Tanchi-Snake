@@ -25,8 +25,9 @@ import dev.connor.tanchi_snake.game.Snake;
 public class Room {
 
     public static final int MAX_PLAYERS = 8;
-    public static final int BOARD_WIDTH = 32;
-    public static final int BOARD_HEIGHT = 32;
+    /** The board is square and wraps at every edge. */
+    public static final int BOARD_WIDTH = 48;
+    public static final int BOARD_HEIGHT = 48;
 
     /** Nobody connected for this long and the room is torn down. */
     public static final long EMPTY_TTL_MILLIS = 20_000;

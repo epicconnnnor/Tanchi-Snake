@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
-  <meta name="theme-color" content="#101014">
+  <meta name="theme-color" content="#07070a">
   <title>Tanchi Snake</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -23,7 +23,7 @@
           forward on the menu screen; every other screen leaves it at rest.
         -->
         <svg class="logo-mark" viewBox="0 0 9 3" width="90" height="30"
-             role="img" aria-label="Tanchi Snake" focusable="false">
+             aria-hidden="true" focusable="false">
           <g id="logo-body">
             <rect class="logo-cell" x="0.07" y="0.07" width="0.86" height="0.86" rx="0.1"></rect>
             <rect class="logo-cell" x="1.07" y="0.07" width="0.86" height="0.86" rx="0.1"></rect>
@@ -41,7 +41,10 @@
           <span class="logo-snake">SNAKE</span>
         </span>
       </h1>
-      <p id="screen-name" class="screen-name" translate="no">MENU</p>
+      <div class="marquee-right">
+        <p id="marquee-code" class="marquee-code" hidden><span class="sr-only">Room </span><span id="marquee-code-value" translate="no"></span></p>
+        <p id="screen-name" class="screen-name" translate="no">MENU</p>
+      </div>
     </header>
 
     <p id="banner" class="banner" role="status" hidden></p>
@@ -94,7 +97,7 @@
         <h2 id="game-title" class="sr-only">Game</h2>
 
         <div class="board-wrap">
-          <canvas id="board" width="512" height="512" role="img"
+          <canvas id="board" width="576" height="576" role="img"
                   aria-label="Game board. Your snake wears a white ring on its head."></canvas>
         </div>
 
@@ -102,8 +105,8 @@
           <p class="field-label" id="scoreboard-label">Scoreboard</p>
           <ol id="scoreboard" class="rows" aria-labelledby="scoreboard-label"></ol>
           <p class="tickline">
-            <span class="field-label">Tick</span>
-            <span id="game-tick" class="tick-value" translate="no">0</span>
+            <span class="field-label">Time</span>
+            <span id="game-clock" class="tick-value" translate="no">00:00</span>
           </p>
         </aside>
       </section>
@@ -156,6 +159,8 @@
 
     </div>
   </div>
+
+  <p class="colophon">&copy;&nbsp;2026 Connor&nbsp;Chen. All rights reserved.</p>
 
   <script src="app.js"></script>
 </body>

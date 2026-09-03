@@ -6,6 +6,8 @@ import java.util.Random;
 
 import org.junit.jupiter.api.Test;
 
+import dev.connor.tanchi_snake.game.GameEngine;
+import dev.connor.tanchi_snake.game.Point;
 import dev.connor.tanchi_snake.game.Snake;
 import dev.connor.tanchi_snake.room.Player;
 import dev.connor.tanchi_snake.room.Room;
@@ -41,6 +43,24 @@ class StateMessageTest {
 
         assertEquals("player-2", state.winnerPlayerId());
         assertNotEquals("session-2", state.winnerPlayerId());
+    }
+
+    @Test
+    void foodGoesOnTheWireWithWhatItIsWorth() {
+        Room room = startedRoom();
+        room.state().addFood(new Point(4, 9), 3);
+
+        StateMessage state = StateMessage.of(room);
+
+        StateMessage.FoodView rich = state.food().stream()
+                .filter(f -> f.x() == 4 && f.y() == 9)
+                .findFirst().orElseThrow();
+        assertEquals(3, rich.value());
+
+        for (StateMessage.FoodView f : state.food()) {
+            assertTrue(f.value() >= 1 && f.value() <= GameEngine.MAX_FOOD_VALUE,
+                    "food worth " + f.value() + " is off the scale");
+        }
     }
 
     @Test

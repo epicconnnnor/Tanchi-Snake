@@ -44,6 +44,8 @@
   var el = {
     banner: document.getElementById('banner'),
     screenName: document.getElementById('screen-name'),
+    marqueeCode: document.getElementById('marquee-code'),
+    marqueeCodeValue: document.getElementById('marquee-code-value'),
 
     menu: document.getElementById('menu'),
     lobby: document.getElementById('lobby'),
@@ -70,7 +72,7 @@
     startBtn: document.getElementById('start-btn'),
 
     board: document.getElementById('board'),
-    gameTick: document.getElementById('game-tick'),
+    gameClock: document.getElementById('game-clock'),
     scoreboard: document.getElementById('scoreboard'),
     dpad: document.querySelectorAll('.dpad-cell'),
 
@@ -83,7 +85,6 @@
   };
 
   var ctx = el.board.getContext('2d');
-  var counter = new Intl.NumberFormat();
 
   // --- connection ---------------------------------------------------------
 
@@ -171,6 +172,14 @@
 
     var screen = SCREENS[which];
     el.screenName.textContent = screen.name;
+
+    // The code sits beside the screen name while a round is on, where the
+    // lobby's big gold code would otherwise be out of reach.
+    if (which !== 'game') {
+      el.marqueeCode.hidden = true;
+      el.marqueeCodeValue.textContent = '';
+    }
+
     document.title = which === 'menu' ? screen.title : screen.title + ' · Tanchi Snake';
 
     if (which !== current) {
@@ -376,11 +385,20 @@
 
   var COLORS = {
     grid: '#1b1f25',
-    wall: '#4b5563',
+    seam: '#333b47',
     food: '#f5f5f4',
     frozen: '#e5e7eb',
     self: '#ffffff'
   };
+
+  // 48 cells of 12 CSS pixels. Both are fixed: a fractional cell renders blurry.
+  var BOARD_PX = 576;
+
+  // GameLoop.TICK_MILLIS. The round clock is derived from the tick count.
+  var TICK_MS = 100;
+
+  /** Food radius in CSS pixels, by what the food is worth. */
+  var FOOD_RADIUS = { 1: 3, 2: 5, 3: 7 };
 
   /*
    * One colour per seat, in join order. Lightness is deliberately varied as
@@ -417,11 +435,47 @@
   }
 
   function renderGame(state) {
-    el.gameTick.textContent = counter.format(state.tick);
+    el.gameClock.textContent = clock(state.tick);
+    el.marqueeCodeValue.textContent = state.room;
+    el.marqueeCode.hidden = false;
 
     drawBoard(state);
     drawScores(state);
     lightDpad(state);
+  }
+
+  /** Ticks elapsed as mm:ss. The server ticks every TICK_MS. */
+  function clock(tick) {
+    var seconds = Math.floor((tick * TICK_MS) / 1000);
+    var minutes = Math.floor(seconds / 60);
+    return pad(minutes) + ':' + pad(seconds % 60);
+  }
+
+  function pad(n) {
+    return (n < 10 ? '0' : '') + n;
+  }
+
+  /*
+   * Matches the backing store to the display. The canvas keeps its 576 CSS
+   * pixels and its 12px cells either way; all that changes is how many device
+   * pixels sit behind each one, which is what stops one cell coming out a
+   * pixel wider than the next on a scaled display.
+   */
+  var boardDpr = 0;
+
+  function sizeBoard() {
+    var dpr = window.devicePixelRatio || 1;
+    if (dpr !== boardDpr) {
+      boardDpr = dpr;
+      el.board.width = Math.round(BOARD_PX * dpr);
+      el.board.height = Math.round(BOARD_PX * dpr);
+      el.board.style.width = BOARD_PX + 'px';
+      el.board.style.height = BOARD_PX + 'px';
+      // Resizing resets the context, so the scale goes on afterwards. Every
+      // draw below is then in CSS pixels.
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    return dpr;
   }
 
   /** The D-pad reports the direction the server last had you facing. */
@@ -441,43 +495,54 @@
   }
 
   function drawBoard(state) {
-    var size = el.board.width;
+    var dpr = sizeBoard();
+    var size = BOARD_PX;
     var cell = size / state.width;
+    // One device pixel, whatever the display is doing.
+    var hair = 1 / dpr;
 
     ctx.clearRect(0, 0, size, size);
     ctx.fillStyle = '#0b0d10';
     ctx.fillRect(0, 0, size, size);
 
-    // Faint grid, so a cell of movement is readable while tuning.
-    ctx.strokeStyle = COLORS.grid;
-    ctx.lineWidth = 1;
+    /*
+     * Grid lines are filled rectangles on the cell boundaries, not strokes.
+     * A stroke straddles the coordinate it is drawn on, so it lands between
+     * device pixels and leaves one cell looking a pixel wider than the next;
+     * a fill starting on the boundary is the same width every time.
+     */
+    ctx.fillStyle = COLORS.grid;
     for (var i = 1; i < state.width; i++) {
-      var at = Math.round(i * cell) + 0.5;
-      ctx.beginPath();
-      ctx.moveTo(at, 0);
-      ctx.lineTo(at, size);
-      ctx.moveTo(0, at);
-      ctx.lineTo(size, at);
-      ctx.stroke();
+      var at = i * cell;
+      ctx.fillRect(at, 0, hair, size);
+      ctx.fillRect(0, at, size, hair);
     }
 
-    // Walls: the board edge is lethal, so make it unmistakable.
-    ctx.strokeStyle = COLORS.wall;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, size - 2, size - 2);
+    // The edges wrap, so they are a seam rather than a wall. Dashed, to say
+    // that a snake goes through it and comes back on the far side.
+    ctx.strokeStyle = COLORS.seam;
+    ctx.lineWidth = hair * 2;
+    ctx.setLineDash([cell / 2, cell / 2]);
+    ctx.strokeRect(0, 0, size, size);
+    ctx.setLineDash([]);
 
     // Food is a pale dot rather than a colour any player might be wearing.
+    // The bigger the dot, the more it is worth.
     ctx.fillStyle = COLORS.food;
     state.food.forEach(function (f) {
       var mid = cell / 2;
       ctx.beginPath();
-      ctx.arc(f.x * cell + mid, f.y * cell + mid, cell * 0.28, 0, Math.PI * 2);
+      ctx.arc(f.x * cell + mid, f.y * cell + mid, radiusOf(f.value), 0, Math.PI * 2);
       ctx.fill();
     });
 
     state.snakes.forEach(function (snake) {
       drawSnake(snake, cell);
     });
+  }
+
+  function radiusOf(value) {
+    return FOOD_RADIUS[value] || FOOD_RADIUS[1];
   }
 
   function drawSnake(snake, cell) {
@@ -636,6 +701,10 @@
   ];
 
   var LOGO_STEP_MS = 400;
+
+  /** Passes before the mark settles back to rest. Four frames each. */
+  var LOGO_CYCLES = 3;
+
   var logoCells = [];
   var logoTimer = null;
   var logoFrame = 0;
@@ -652,6 +721,10 @@
     extra.classList.remove('logo-cell--head');
     el.logoBody.appendChild(extra);
     logoCells.push(extra);
+
+    // Draw the resting frame, which is what hides that ninth cell until the
+    // snake has eaten its way up to it.
+    drawLogo(0);
   }
 
   function drawLogo(index) {
@@ -682,9 +755,13 @@
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       return;
     }
+    var stepsLeft = LOGO_CYCLES * LOGO_FRAMES.length;
     logoTimer = setInterval(function () {
       logoFrame = (logoFrame + 1) % LOGO_FRAMES.length;
       drawLogo(logoFrame);
+      if (--stepsLeft <= 0) {
+        stopLogo();
+      }
     }, LOGO_STEP_MS);
   }
 
@@ -786,6 +863,17 @@
 
   el.againBtn.addEventListener('click', function () {
     send({ type: 'playagain' });
+  });
+
+  /*
+   * Only while a round is on. Reloading from the menu, the lobby or the
+   * results screen costs nothing, and a prompt there is just an obstacle.
+   */
+  window.addEventListener('beforeunload', function (event) {
+    if (lastState && lastState.phase === 'RUNNING') {
+      event.preventDefault();
+      event.returnValue = '';
+    }
   });
 
   // --- boot ---------------------------------------------------------------

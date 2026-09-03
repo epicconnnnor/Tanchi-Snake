@@ -11,13 +11,28 @@ import java.util.Set;
 
 public class GameEngine {
 
-    public static final int FOOD_PER_LEVEL = 5;
+    /**
+     * Food VALUE a snake must swallow to climb a level, not a number of
+     * pieces. Food averages 1.5 apiece, so 8 is a little over five mouthfuls
+     * -- about what the old flat 5-per-level asked for. Tune it here.
+     */
+    public static final int FOOD_PER_LEVEL = 8;
+
     public static final int TILES_PER_LEVEL = 4;
     public static final int STUN_TICKS = 10;
     public static final int WIN_LEVEL = 10;
 
-    /** How much food the board is kept stocked with. */
-    public static final int FOOD_ON_BOARD = 5;
+    /** How much food the board is kept stocked with, scaled to a 48x48 board. */
+    public static final int FOOD_ON_BOARD = 12;
+
+    /** The most a single piece of food can be worth. */
+    public static final int MAX_FOOD_VALUE = 3;
+
+    /**
+     * Percentage chance of each food value, from 1 upwards: 60% worth 1, 30%
+     * worth 2, 10% worth 3. Must total 100.
+     */
+    private static final int[] FOOD_VALUE_ODDS = { 60, 30, 10 };
 
     /** Clear cells a snake needs ahead of it to be given a spot. */
     public static final int SPAWN_CLEARANCE = 3;
@@ -53,7 +68,8 @@ public class GameEngine {
             if (s.stunTicks() > 0) {
                 continue;
             }
-            intended.put(s, s.head().move(s.direction()));
+            // The edges wrap, so this is always a cell on the board.
+            intended.put(s, state.wrap(s.head().move(s.direction())));
         }
 
         // 3. PASS TWO — resolve every outcome against the full picture. Each
@@ -62,19 +78,13 @@ public class GameEngine {
         Set<Snake> dead = new HashSet<>();
         Set<Snake> stunned = new HashSet<>();
 
-        // 3a. Off the board.
-        for (Map.Entry<Snake, Point> e : intended.entrySet()) {
-            if (!state.inBounds(e.getValue())) {
-                dead.add(e.getKey());
-            }
-        }
+        // There is no death by wall: the board wraps, so running into another
+        // snake is the only way off it.
 
         // 3b. Head into head — two or more snakes claiming the same cell.
         Map<Point, List<Snake>> contested = new HashMap<>();
         for (Map.Entry<Snake, Point> e : intended.entrySet()) {
-            if (!dead.contains(e.getKey())) {
-                contested.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(e.getKey());
-            }
+            contested.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(e.getKey());
         }
         for (List<Snake> rivals : contested.values()) {
             if (rivals.size() < 2) {
@@ -160,14 +170,15 @@ public class GameEngine {
         for (Map.Entry<Snake, Point> e : intended.entrySet()) {
             Snake s = e.getKey();
             Point newHead = e.getValue();
-            boolean ate = state.food().contains(newHead);
+            int value = state.foodValue(newHead);
+            boolean ate = value > 0;
 
-            s.move(ate);
+            s.moveTo(newHead, ate);
 
             if (ate) {
                 state.removeFood(newHead);
-                s.eat();
-                if (s.foodEaten() >= FOOD_PER_LEVEL) {
+                s.eat(value);
+                if (s.foodValueEaten() >= FOOD_PER_LEVEL) {
                     s.setLevel(s.level() + 1);
                     // Stamped on the way up only. Ranking compares snakes on
                     // the same level, and the earlier arrival takes it.
@@ -224,16 +235,33 @@ public class GameEngine {
     /** Tops the board back up to {@link #FOOD_ON_BOARD} pieces of food. */
     private void replenishFood(GameState state) {
         Set<Point> taken = new HashSet<>(state.occupiedCells());
-        taken.addAll(state.food());
+        taken.addAll(state.food().keySet());
 
         while (state.food().size() < FOOD_ON_BOARD) {
             Point p = findFreeCell(state, taken);
             if (p == null) {
                 break; // board is full; try again next tick
             }
-            state.addFood(p);
+            state.addFood(p, rollFoodValue());
             taken.add(p);
         }
+    }
+
+    /**
+     * Picks what a new piece of food is worth, against
+     * {@link #FOOD_VALUE_ODDS}. Uses the injected Random so a seeded board
+     * plays out the same way twice.
+     */
+    private int rollFoodValue() {
+        int roll = random.nextInt(100);
+        int cumulative = 0;
+        for (int i = 0; i < FOOD_VALUE_ODDS.length; i++) {
+            cumulative += FOOD_VALUE_ODDS[i];
+            if (roll < cumulative) {
+                return i + 1;
+            }
+        }
+        return MAX_FOOD_VALUE;
     }
 
     /** A random cell holding neither snake nor food, or null if there is none. */
@@ -278,7 +306,7 @@ public class GameEngine {
         }
 
         // The old head becomes the first body segment behind the new head.
-        boolean grows = state.food().contains(newHead);
+        boolean grows = state.hasFood(newHead);
         int end = grows ? cells.size() : cells.size() - 1;
         return new HashSet<>(cells.subList(0, end));
     }
@@ -331,14 +359,18 @@ public class GameEngine {
         return null;
     }
 
-    /** True if the start cell and the run ahead of it are on the board and free. */
+    /**
+     * True if the start cell and the run ahead of it are free. The run wraps
+     * with the board, so no cell is disqualified for being near an edge any
+     * more -- only for being occupied.
+     */
     private boolean hasClearRun(GameState state, Set<Point> blocked, Point start, Direction d) {
-        Point p = start;
+        Point p = state.wrap(start);
         for (int i = 0; i <= SPAWN_CLEARANCE; i++) {
-            if (!state.inBounds(p) || blocked.contains(p)) {
+            if (blocked.contains(p)) {
                 return false;
             }
-            p = p.move(d);
+            p = state.wrap(p.move(d));
         }
         return true;
     }

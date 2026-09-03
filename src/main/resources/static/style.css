@@ -64,7 +64,7 @@ body {
 .skip-link {
   position: absolute;
   left: 12px;
-  top: -60px;
+  top: 12px;
   z-index: 10;
   padding: 10px 14px;
   background: var(--panel);
@@ -73,15 +73,16 @@ body {
   color: var(--text);
   font-size: 13px;
   text-decoration: none;
-  transition: top 120ms ease;
+  transform: translateY(-72px);
+  transition: transform 120ms ease;
 }
 
-.skip-link:focus-visible { top: 12px; }
+.skip-link:focus-visible { transform: translateY(0); }
 
 /* --- chassis ------------------------------------------------------------ */
 
 .cabinet {
-  max-width: 800px;
+  max-width: 864px;
   margin: 0 auto;
   background: var(--chassis);
   border: 0.5px solid var(--edge);
@@ -138,8 +139,22 @@ body {
 .logo-tanchi { color: var(--text); }
 .logo-snake { color: var(--red); }
 
-.screen-name {
+.marquee-right {
   flex: none;
+  text-align: right;
+}
+
+.marquee-code {
+  margin: 0 -4px 2px 0;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: 4px;
+  color: var(--gold);
+}
+
+.screen-name {
   margin: 0 -3px 0 0;
   font-family: var(--mono);
   font-size: 11px;
@@ -172,8 +187,8 @@ body {
   box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.75);
 }
 
-/* Scanlines. 2px period at 3% white: visible on the flat panels, and at 16px
-   cells it never eats a snake segment on the 32x32 board. */
+/* Scanlines. 2px period at 3% white: visible on the flat panels, and at 12px
+   cells it never eats a snake segment on the 48x48 board. */
 .recess::after {
   content: "";
   position: absolute;
@@ -408,15 +423,18 @@ input:focus-visible { border-color: var(--text); }
 
 .board-wrap { flex: none; }
 
-/* 512px at 16px cells. Any other size renders fractional cells and blurs. */
+/*
+ * 576 CSS pixels at 48 cells of 12. app.js sizes the backing store to the
+ * display so a cell is a whole number of device pixels; the CSS size never
+ * changes, because a fractional cell renders blurry.
+ */
 #board {
   display: block;
-  width: 512px;
-  height: 512px;
+  width: 576px;
+  height: 576px;
   background: var(--recess);
   border: 1px solid var(--edge);
   border-radius: 2px;
-  image-rendering: pixelated;
 }
 
 .scorepanel {
@@ -424,7 +442,7 @@ input:focus-visible { border-color: var(--text); }
   flex: none;
   flex-direction: column;
   width: 190px;
-  min-height: 512px;
+  min-height: 576px;
 }
 
 .tickline {
@@ -611,10 +629,19 @@ input:focus-visible { border-color: var(--text); }
   font-size: 12px;
 }
 
+.colophon {
+  max-width: 864px;
+  margin: 16px auto 0;
+  color: var(--dim);
+  font-size: 11px;
+  text-align: center;
+}
+
 /* --- responsive --------------------------------------------------------- */
 
 @media (max-width: 900px) {
-  .cabinet { max-width: 600px; }
+  .cabinet,
+  .colophon { max-width: 660px; }
 
   /* The board is fixed at 512px; the panel moves under it rather than
      squeezing the canvas into fractional cells. */
@@ -632,7 +659,7 @@ input:focus-visible { border-color: var(--text); }
 }
 
 /* Narrower than the board itself: scroll the screen, never scale the canvas. */
-@media (max-width: 620px) {
+@media (max-width: 680px) {
   .screen--game {
     overflow-x: auto;
     overscroll-behavior-x: contain;

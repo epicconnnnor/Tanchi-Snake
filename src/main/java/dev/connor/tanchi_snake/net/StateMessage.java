@@ -2,6 +2,7 @@ package dev.connor.tanchi_snake.net;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import dev.connor.tanchi_snake.game.Point;
 import dev.connor.tanchi_snake.game.Snake;
@@ -24,11 +25,15 @@ public record StateMessage(
         String hostPlayerId,
         String winnerPlayerId,
         List<SnakeView> snakes,
-        List<PointView> food,
+        List<FoodView> food,
         List<PlayerView> players,
         List<Standing> standings) {
 
     public record PointView(int x, int y) {
+    }
+
+    /** A cell of food and what eating it is worth toward the next level. */
+    public record FoodView(int x, int y, int value) {
     }
 
     public record SnakeView(
@@ -93,7 +98,7 @@ public record StateMessage(
                 room.hostPlayerId(),
                 winner == null ? null : winner.id(),
                 snakes,
-                points(room.state().food()),
+                food(room.state().food()),
                 players,
                 room.phase() == RoomPhase.RESULTS ? room.standings() : List.of());
     }
@@ -102,6 +107,14 @@ public record StateMessage(
         List<PointView> out = new ArrayList<>();
         for (Point p : source) {
             out.add(new PointView(p.x(), p.y()));
+        }
+        return out;
+    }
+
+    private static List<FoodView> food(Map<Point, Integer> source) {
+        List<FoodView> out = new ArrayList<>();
+        for (Map.Entry<Point, Integer> e : source.entrySet()) {
+            out.add(new FoodView(e.getKey().x(), e.getKey().y(), e.getValue()));
         }
         return out;
     }

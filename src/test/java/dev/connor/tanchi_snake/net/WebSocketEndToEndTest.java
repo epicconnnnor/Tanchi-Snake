@@ -22,6 +22,8 @@ import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import dev.connor.tanchi_snake.game.Direction;
+import dev.connor.tanchi_snake.game.GameEngine;
+import dev.connor.tanchi_snake.room.Room;
 import dev.connor.tanchi_snake.room.RoomCodeGenerator;
 import tools.jackson.databind.ObjectMapper;
 
@@ -406,17 +408,19 @@ class WebSocketEndToEndTest {
             assertEquals(code, state.room());
             assertEquals("RUNNING", state.phase());
             assertTrue(state.tick() >= 0);
-            assertEquals(32, state.width());
-            assertEquals(32, state.height());
+            assertEquals(Room.BOARD_WIDTH, state.width());
+            assertEquals(Room.BOARD_HEIGHT, state.height());
             assertNotNull(state.hostPlayerId());
             assertNull(state.winnerPlayerId(), "nobody has won yet");
             assertTrue(state.standings().isEmpty(), "standings are only for the results screen");
 
             // Food
-            assertEquals(5, state.food().size(), "the board is kept stocked");
-            for (StateMessage.PointView f : state.food()) {
+            assertEquals(GameEngine.FOOD_ON_BOARD, state.food().size(), "the board is kept stocked");
+            for (StateMessage.FoodView f : state.food()) {
                 assertTrue(f.x() >= 0 && f.x() < state.width(), "food off board: " + f);
                 assertTrue(f.y() >= 0 && f.y() < state.height(), "food off board: " + f);
+                assertTrue(f.value() >= 1 && f.value() <= GameEngine.MAX_FOOD_VALUE,
+                        "food worth " + f.value() + " is off the scale");
             }
 
             // Players

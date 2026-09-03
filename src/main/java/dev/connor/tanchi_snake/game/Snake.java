@@ -12,7 +12,7 @@ public class Snake {
     private Direction direction;
     private int level;
     private int stunTicks;
-    private int foodEaten;
+    private int foodValueEaten;
     private int levelReachedTick;
 
     public Snake(String id, Point start, Direction direction) {
@@ -20,7 +20,7 @@ public class Snake {
         this.direction = direction;
         this.level = 1;
         this.stunTicks = 0;
-        this.foodEaten = 0;
+        this.foodValueEaten = 0;
         this.levelReachedTick = 0;
         this.body = new ArrayDeque<>();
         this.body.addFirst(start);
@@ -56,8 +56,12 @@ public class Snake {
         return stunTicks;
     }
 
-    public int foodEaten() {
-        return foodEaten;
+    /**
+     * Food value swallowed since the last level. Food is worth 1, 2 or 3, so
+     * this climbs faster than the number of pieces eaten.
+     */
+    public int foodValueEaten() {
+        return foodValueEaten;
     }
 
     /**
@@ -70,8 +74,12 @@ public class Snake {
 
     // --- mutators ---
 
-    public void move(boolean grow) {
-        Point newHead = head().move(direction);
+    /**
+     * Puts the head on the given cell. The caller works out where that is,
+     * because the edges wrap and a snake knows nothing about the board it is
+     * on.
+     */
+    public void moveTo(Point newHead, boolean grow) {
         body.addFirst(newHead);
         if (!grow) {
             body.removeLast();
@@ -120,11 +128,11 @@ public class Snake {
         }
     }
 
-    public void eat() {
-        foodEaten++;
+    public void eat(int foodValue) {
+        foodValueEaten += foodValue;
     }
 
     public void resetFoodEaten() {
-        foodEaten = 0;
+        foodValueEaten = 0;
     }
 }
