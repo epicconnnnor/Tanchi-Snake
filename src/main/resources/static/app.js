@@ -60,6 +60,8 @@
     menuForm: document.getElementById('menu-form'),
     name: document.getElementById('name'),
     room: document.getElementById('room'),
+    roomField: document.getElementById('room-field'),
+    soloBtn: document.getElementById('solo-btn'),
     createBtn: document.getElementById('create-btn'),
     joinBtn: document.getElementById('join-btn'),
 
@@ -70,6 +72,8 @@
     lobbyHint: document.getElementById('lobby-hint'),
     readyBtn: document.getElementById('ready-btn'),
     startBtn: document.getElementById('start-btn'),
+    leaveLobbyBtn: document.getElementById('leave-lobby-btn'),
+    leaveGameBtn: document.getElementById('leave-game-btn'),
 
     board: document.getElementById('board'),
     gameClock: document.getElementById('game-clock'),
@@ -92,6 +96,16 @@
   var myPlayerId = recall(STORE_PLAYER);
   var lastState = null;
 
+  /*
+   * Solo is a room like any other, just one nobody else is invited to. The
+   * client asks for the round itself the moment the empty lobby arrives, so
+   * there is no server rule about how many players a round needs.
+   */
+  var startAlone = false;
+
+  /** Set while we hang up on purpose, so the close reads as intended. */
+  var quitting = false;
+
   function socketUrl() {
     var scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
     return scheme + '//' + location.host + '/ws';
@@ -107,10 +121,17 @@
     socket.addEventListener('open', onOpen);
     socket.addEventListener('message', onMessage);
     socket.addEventListener('close', function () {
+      // A socket we closed on the way out of a room is not a fault.
+      if (quitting) {
+        quitting = false;
+        return;
+      }
       showBanner('Disconnected. Reload the page to play again.');
     });
     socket.addEventListener('error', function () {
-      showBanner('Connection error.');
+      if (!quitting) {
+        showBanner('Connection error.');
+      }
     });
   }
 
@@ -137,6 +158,11 @@
       clearBanner();
     } else if (message.type === 'state') {
       lastState = message;
+      if (startAlone && message.phase === 'LOBBY') {
+        startAlone = false;
+        send({ type: 'start' });
+        return; // the round's own state message is a tick away
+      }
       render(message);
     } else if (message.type === 'error') {
       showBanner(message.message || 'Something went wrong.');
@@ -223,6 +249,27 @@
       show('game');
       renderGame(state);
     }
+  }
+
+  /*
+   * Walking out. The seat goes back straight away rather than sitting empty
+   * for the reconnect window, and the stored identity goes with it: whoever
+   * comes back is a newcomer, not this player returning.
+   */
+  function leaveRoom() {
+    send({ type: 'leave' });
+    forget();
+    myPlayerId = null;
+    lastState = null;
+    startAlone = false;
+    if (socket) {
+      quitting = true;
+      socket.close();
+      socket = null;
+    }
+    clearBanner();
+    closeRoomField();
+    show('menu');
   }
 
   // --- shared row pattern -------------------------------------------------
@@ -802,23 +849,45 @@
 
   // --- actions ------------------------------------------------------------
 
-  function createRoom() {
+  function createRoom(alone) {
     clearBanner();
+    startAlone = !!alone;
     var name = el.name.value.trim();
     connect(function () {
       send({ type: 'create', name: name });
     });
   }
 
+  /** The code field only appears once somebody says they have a code. */
+  function openRoomField() {
+    el.roomField.hidden = false;
+    el.joinBtn.setAttribute('aria-expanded', 'true');
+    el.joinBtn.textContent = 'Join';
+    el.room.focus();
+  }
+
+  function closeRoomField() {
+    el.roomField.hidden = true;
+    el.room.value = '';
+    el.joinBtn.setAttribute('aria-expanded', 'false');
+    el.joinBtn.textContent = 'Join via game code';
+  }
+
   function joinRoom() {
     clearBanner();
+    // First press asks for the code; the next one uses it.
+    if (el.roomField.hidden) {
+      openRoomField();
+      return;
+    }
     var code = el.room.value.trim().toUpperCase();
     if (!code) {
-      showBanner('Enter a room code to join.');
+      showBanner('Enter a game code to join.');
       el.room.focus();
       return;
     }
     var name = el.name.value.trim();
+    startAlone = false;
     connect(function () {
       send({ type: 'join', room: code, name: name });
     });
@@ -830,7 +899,7 @@
     if (event.submitter === el.joinBtn) {
       joinRoom();
     } else {
-      createRoom();
+      createRoom(event.submitter === el.soloBtn);
     }
   });
 
@@ -839,11 +908,20 @@
    * whichever field you were in. Each field says for itself what Enter means:
    * a name on its own creates a room, a room code joins one.
    */
+  /*
+   * Enter in the name field means the code field if it is open -- somebody
+   * halfway through joining a game is not asking to start a solo round.
+   */
   el.name.addEventListener('keydown', function (event) {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      createRoom();
+    if (event.key !== 'Enter') {
+      return;
     }
+    event.preventDefault();
+    if (!el.roomField.hidden) {
+      el.room.focus();
+      return;
+    }
+    createRoom(true);
   });
 
   el.room.addEventListener('keydown', function (event) {
@@ -863,6 +941,20 @@
 
   el.againBtn.addEventListener('click', function () {
     send({ type: 'playagain' });
+  });
+
+  el.leaveLobbyBtn.addEventListener('click', leaveRoom);
+
+  /*
+   * Mid-round, leaving costs the player their snake and their placing, so it
+   * asks first -- the same question closing the tab would have put to them.
+   */
+  el.leaveGameBtn.addEventListener('click', function () {
+    var running = lastState && lastState.phase === 'RUNNING';
+    if (running && !window.confirm('Leave the round? Your snake goes with you.')) {
+      return;
+    }
+    leaveRoom();
   });
 
   /*

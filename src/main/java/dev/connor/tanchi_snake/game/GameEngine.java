@@ -31,9 +31,11 @@ public class GameEngine {
     public static final int STUN_DEATH_TICKS = 50;
 
     /**
-     * How far a respawning snake is kept from every other living head, as a
-     * Chebyshev distance across the wrapping board. Relaxed to the roomiest
-     * cell available when nothing on the board is this clear.
+     * How far a snake arriving on the board is kept from every other living
+     * head, as a Chebyshev distance across the wrapping board. Applies to
+     * joiners and to respawns alike: landing next to somebody is the same
+     * unfair start either way. Relaxed to the roomiest cell available when
+     * nothing on the board is this clear.
      */
     public static final int RESPAWN_MIN_DISTANCE = 8;
 
@@ -52,7 +54,7 @@ public class GameEngine {
     /** Clear cells a snake needs ahead of it to be given a spot. */
     public static final int SPAWN_CLEARANCE = 3;
 
-    /** Random spots tried before falling back to a sweep of the board. */
+    /** Random cells tried before falling back to a sweep of the board. */
     private static final int PLACEMENT_ATTEMPTS = 200;
 
     private final Random random;
@@ -245,6 +247,7 @@ public class GameEngine {
      */
     public Snake spawnSnake(GameState state, String id, Direction direction) {
         Point spot = findSpawn(state, direction, null, Set.of());
+
         if (spot == null) {
             return null;
         }
@@ -359,7 +362,7 @@ public class GameEngine {
         s.stun(0);
         s.clearStuckTicks();
 
-        Point spot = findRespawn(state, s.direction(), s, claimed);
+        Point spot = findSpawn(state, s.direction(), s, claimed);
         if (spot != null) {
             s.respawnAt(spot);
         }
@@ -369,54 +372,23 @@ public class GameEngine {
     }
 
     /**
-     * Picks a random cell that nothing else occupies and that
-     * has {@link #SPAWN_CLEARANCE} clear cells ahead of it in the given
-     * direction, so nothing is placed staring straight at a wall.
-     *
-     * @return the spot, or null if the board has no room for one
-     */
-    private Point findSpawn(GameState state, Direction direction, Snake ignore, Set<Point> claimed) {
-        Set<Point> blocked = new HashSet<>(claimed);
-        for (Snake other : state.snakes()) {
-            if (other != ignore) {
-                blocked.addAll(other.body());
-            }
-        }
-
-        for (int i = 0; i < PLACEMENT_ATTEMPTS; i++) {
-            Point p = new Point(random.nextInt(state.width()), random.nextInt(state.height()));
-            if (hasClearRun(state, blocked, p, direction)) {
-                return p;
-            }
-        }
-
-        // Crowded board: sweep it rather than let the random search give up.
-        for (int y = 0; y < state.height(); y++) {
-            for (int x = 0; x < state.width(); x++) {
-                Point p = new Point(x, y);
-                if (hasClearRun(state, blocked, p, direction)) {
-                    return p;
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Picks where a killed snake comes back. Same clearance rule as a joiner,
-     * plus room from everyone else: a cell at least
+     * Picks where a snake arrives, whether it is joining or coming back from a
+     * death. The cell needs {@link #SPAWN_CLEARANCE} free cells ahead of it so
+     * nothing starts nose-first into a body, and it is kept
      * {@link #RESPAWN_MIN_DISTANCE} from every other living head. When the
-     * board is too crowded for that, the roomiest cell going is better than
-     * refusing to place the snake at all.
+     * board is too crowded for that, the roomiest cell going beats refusing to
+     * place the snake at all.
      *
+     * @param arriving the snake being placed, whose own body does not block
+     *                 it; null for a joiner, which has no body yet
      * @return the spot, or null if the board has nowhere to put it
      */
-    private Point findRespawn(GameState state, Direction facing, Snake reviving,
+    private Point findSpawn(GameState state, Direction facing, Snake arriving,
             Set<Point> claimed) {
         Set<Point> blocked = new HashSet<>(claimed);
         List<Point> heads = new ArrayList<>();
         for (Snake other : state.snakes()) {
-            if (other != reviving) {
+            if (other != arriving) {
                 blocked.addAll(other.body());
                 if (other.length() > 0) {
                     heads.add(other.head());

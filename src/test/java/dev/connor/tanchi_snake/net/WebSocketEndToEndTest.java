@@ -554,6 +554,97 @@ class WebSocketEndToEndTest {
     }
 
     @Test
+    void leavingTheLobbyFreesTheSeatForEveryoneElseToSee() throws Exception {
+        try (Client host = connect(); Client guest = connect()) {
+            String code = createRoom(host, "Ann");
+            joinRoom(guest, code, "Bo");
+            assertNotNull(host.awaitState(s -> s.players().size() == 2),
+                    "the guest never showed up");
+
+            guest.send("{\"type\":\"leave\"}");
+
+            StateMessage after = host.awaitState(s -> s.players().size() == 1);
+            assertNotNull(after, "the leaver is still taking up a seat");
+            assertEquals(host.playerId, after.players().get(0).playerId());
+        }
+    }
+
+    @Test
+    void theHostLeavingHandsTheRoomToWhoeverIsLeft() throws Exception {
+        try (Client host = connect(); Client guest = connect()) {
+            String code = createRoom(host, "Ann");
+            joinRoom(guest, code, "Bo");
+            assertNotNull(guest.awaitState(s -> s.players().size() == 2));
+
+            host.send("{\"type\":\"leave\"}");
+
+            StateMessage after = guest.awaitState(
+                    s -> s.players().size() == 1 && guest.playerId.equals(s.hostPlayerId()));
+            assertNotNull(after, "the room never found a new host");
+        }
+    }
+
+    @Test
+    void leavingMidRoundTakesTheSnakeWithIt() throws Exception {
+        try (Client host = connect(); Client guest = connect()) {
+            String code = createRoom(host, "Ann");
+            joinRoom(guest, code, "Bo");
+            assertNotNull(host.awaitState(s -> s.players().size() == 2));
+            host.send("{\"type\":\"start\"}");
+            assertNotNull(host.awaitState(
+                    s -> "RUNNING".equals(s.phase()) && s.snakes().size() == 2),
+                    "the round never got going with both snakes");
+
+            guest.send("{\"type\":\"leave\"}");
+
+            StateMessage after = host.awaitState(s -> s.snakes().size() == 1);
+            assertNotNull(after, "the leaver's snake is still on the board");
+            assertEquals(1, after.players().size());
+            assertEquals("RUNNING", after.phase(), "the round carries on");
+            assertEquals(host.playerId, after.snakes().get(0).id());
+        }
+    }
+
+    @Test
+    void aPlayerWhoLeftComesBackAsANewcomer() throws Exception {
+        try (Client host = connect(); Client guest = connect()) {
+            String code = createRoom(host, "Ann");
+            joinRoom(guest, code, "Bo");
+            assertNotNull(host.awaitState(s -> s.players().size() == 2));
+            String oldId = guest.playerId;
+
+            guest.send("{\"type\":\"leave\"}");
+            assertNotNull(host.awaitState(s -> s.players().size() == 1));
+
+            // The old id is spent: claiming it must not hand back the seat.
+            try (Client returning = connect()) {
+                rejoinRoom(returning, code, oldId);
+                assertNotEquals(oldId, returning.playerId,
+                        "a left seat was handed back to a stale id");
+
+                StateMessage after = host.awaitState(s -> s.players().size() == 2);
+                assertNotNull(after, "the returning player never got a seat");
+            }
+        }
+    }
+
+    @Test
+    void aSoloRoundStartsWithOnePlayerAndNoReadyStep() throws Exception {
+        try (Client solo = connect()) {
+            createRoom(solo, "Alone");
+            // Exactly what the menu's Play solo does: create, then start.
+            solo.send("{\"type\":\"start\"}");
+
+            StateMessage running = solo.awaitState(s -> "RUNNING".equals(s.phase()));
+            assertNotNull(running, "a lone player could not start a round");
+            assertEquals(1, running.players().size());
+            assertEquals(1, running.snakes().size());
+            assertFalse(running.players().get(0).ready(),
+                    "and nobody had to press ready first");
+        }
+    }
+
+    @Test
     void theServerKeepsTickingThroughAStreamOfJunk() throws Exception {
         try (Client host = connect()) {
             createRoom(host, "Sturdy");

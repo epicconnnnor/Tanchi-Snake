@@ -580,6 +580,43 @@ class GameEngineTest {
     }
 
     @Test
+    void aJoinerIsKeptAwayFromEveryLivingHead() {
+        GameState state = new GameState(48, 48);
+        Snake first = horizontalSnake("first", new Point(10, 10), 4);
+        Snake second = horizontalSnake("second", new Point(30, 30), 4);
+        state.addSnake(first);
+        state.addSnake(second);
+
+        // Every seat, not just a lucky one.
+        for (int i = 0; i < 6; i++) {
+            Snake joiner = new GameEngine(new Random(100 + i))
+                    .spawnSnake(state, "joiner" + i, Direction.RIGHT);
+            assertNotNull(joiner, "the board had room but nobody was placed");
+            for (Snake other : state.snakes()) {
+                if (other == joiner) {
+                    continue;
+                }
+                assertTrue(GameEngine.ringDistance(state, joiner.head(), other.head())
+                                >= GameEngine.RESPAWN_MIN_DISTANCE,
+                        "joiner landed " + joiner.head() + " next to " + other.head());
+            }
+        }
+    }
+
+    @Test
+    void aJoinerRelaxesTheDistanceRatherThanRefusingToSpawn() {
+        // Nothing on a 10x10 ring is 8 apart; a joiner still gets a seat.
+        GameState state = new GameState(10, 10);
+        state.addSnake(new Snake("sitting", new Point(5, 5), Direction.RIGHT));
+
+        Snake joiner = new GameEngine(new Random(77)).spawnSnake(state, "joiner", Direction.RIGHT);
+
+        assertNotNull(joiner, "a crowded board must still seat a joiner");
+        assertEquals(5, GameEngine.ringDistance(state, joiner.head(), new Point(5, 5)),
+                "and it should take the roomiest cell going");
+    }
+
+    @Test
     void spawnSnakeReturnsNullWhenNoSpotHasClearance() {
         // A run of four wraps the whole of a 4x1 board, so a single occupied
         // cell is enough to spoil every start on it.

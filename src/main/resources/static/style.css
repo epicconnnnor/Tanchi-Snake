@@ -222,6 +222,7 @@ body {
 
 .control-set {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
@@ -254,6 +255,18 @@ body {
   touch-action: manipulation;
   transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease,
               box-shadow 120ms ease, transform 80ms ease;
+}
+
+/* Leaving is never the thing you came here to do. */
+.btn--quiet {
+  border-color: transparent;
+  color: var(--dim);
+}
+
+.btn--quiet:hover,
+.btn--quiet:focus-visible {
+  border-color: var(--edge);
+  color: var(--text);
 }
 
 .btn--red {

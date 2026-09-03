@@ -166,7 +166,10 @@ public class RoomManager {
         return room;
     }
 
-    /** Removes a player for good, e.g. once their reconnect window lapses. */
+    /**
+     * Removes a player for good: they asked to leave, or their reconnect
+     * window lapsed. Frees the seat and takes their snake off the board.
+     */
     public Room leave(String sessionId) {
         String playerId = playerBySession.remove(sessionId);
         if (playerId == null) {
@@ -174,7 +177,7 @@ public class RoomManager {
         }
         Room room = roomOfPlayer(playerId);
         if (room != null) {
-            room.remove(playerId, clock.millis());
+            room.leaveNow(playerId, clock.millis());
         }
         roomByPlayer.remove(playerId);
         return room;

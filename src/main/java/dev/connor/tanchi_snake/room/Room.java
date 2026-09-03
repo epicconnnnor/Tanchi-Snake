@@ -404,15 +404,36 @@ public class Room {
             if (nowMillis - p.disconnectedAtMillis() < DISCONNECT_GRACE_MILLIS) {
                 continue;
             }
-            Snake s = snakeOf(p.playerId());
-            if (s != null) {
-                p.rememberStanding(s.level(), s.levelReachedTick());
-                state.removeSnake(p.playerId());
-            }
+            releaseSnake(p);
             remove(p.playerId(), nowMillis);
             dropped.add(p.playerId());
         }
         return dropped;
+    }
+
+    /**
+     * A player leaving of their own accord. Their seat goes back immediately
+     * rather than after the reconnect window, but the snake comes off the
+     * board the same way, so the round they walked out of still ranks them.
+     *
+     * @return the player who left, or null if they were not in this room
+     */
+    public Player leaveNow(String playerId, long nowMillis) {
+        Player p = players.get(playerId);
+        if (p == null) {
+            return null;
+        }
+        releaseSnake(p);
+        return remove(playerId, nowMillis);
+    }
+
+    /** Takes a player's snake off the board, keeping the standing it earned. */
+    private void releaseSnake(Player p) {
+        Snake s = snakeOf(p.playerId());
+        if (s != null) {
+            p.rememberStanding(s.level(), s.levelReachedTick());
+            state.removeSnake(p.playerId());
+        }
     }
 
     /** Moves to the results screen once the board has a winner. */

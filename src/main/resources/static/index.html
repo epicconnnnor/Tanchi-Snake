@@ -57,13 +57,17 @@
         <h2 id="menu-title" class="sr-only">Menu</h2>
         <form id="menu-form" class="menu-form" novalidate>
           <div>
-            <label class="field-label" for="name">Snake name</label>
+            <label class="field-label" for="name">Enter your snake name (optional)</label>
             <input id="name" name="name" type="text" maxlength="20"
                    placeholder="Leave blank for a random one…"
                    autocomplete="nickname" spellcheck="false" enterkeyhint="go">
           </div>
-          <div>
-            <label class="field-label" for="room">Room code</label>
+          <!--
+            Hidden until asked for, so the menu reads as three choices rather
+            than two fields with two buttons between them.
+          -->
+          <div id="room-field" hidden>
+            <label class="field-label" for="room">Game code</label>
             <input id="room" name="room" class="room-input" type="text" maxlength="4"
                    placeholder="ABCD" autocomplete="off" spellcheck="false"
                    autocapitalize="characters" inputmode="text" enterkeyhint="go"
@@ -124,11 +128,14 @@
     <div class="controls">
 
       <div id="menu-controls" class="control-set">
-        <button id="create-btn" class="btn btn--red" type="submit" form="menu-form">Create room</button>
-        <button id="join-btn" class="btn btn--gold" type="submit" form="menu-form">Join</button>
+        <button id="solo-btn" class="btn btn--red" type="submit" form="menu-form">Play solo</button>
+        <button id="create-btn" class="btn" type="submit" form="menu-form">Create multiplayer game</button>
+        <button id="join-btn" class="btn btn--gold" type="submit" form="menu-form"
+                aria-expanded="false" aria-controls="room-field">Join via game code</button>
       </div>
 
       <div id="lobby-controls" class="control-set" hidden>
+        <button id="leave-lobby-btn" class="btn btn--quiet" type="button">Leave</button>
         <button id="ready-btn" class="btn btn--green" type="button">Ready</button>
         <button id="start-btn" class="btn btn--red" type="button" hidden>Start round</button>
       </div>
@@ -148,6 +155,7 @@
         </div>
         <div class="control-right">
           <p class="keyhint" translate="no">WASD / ARROWS</p>
+          <button id="leave-game-btn" class="btn btn--quiet" type="button">Leave game</button>
           <span class="lamp" aria-hidden="true"></span>
         </div>
       </div>
