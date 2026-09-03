@@ -116,6 +116,21 @@ button.primary {
   background: var(--panel);
 }
 
+.label-with-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 2px;
+  flex: none;
+}
+
 .players .tags, .scores .lvl {
   color: var(--muted);
   font-size: 12px;

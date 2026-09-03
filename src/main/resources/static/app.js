@@ -176,12 +176,17 @@
         row.className = 'away';
       }
 
+      var label = document.createElement('span');
+      label.className = 'label-with-swatch';
+      label.appendChild(swatch(player.colorIndex));
+
       var name = document.createElement('span');
       name.textContent = player.name;
       if (player.playerId === myPlayerId) {
         name.className = 'you';
         name.textContent = player.name + ' (you)';
       }
+      label.appendChild(name);
 
       var tags = document.createElement('span');
       tags.className = 'tags';
@@ -195,7 +200,7 @@
       }
       tags.textContent = parts.join(' · ');
 
-      row.appendChild(name);
+      row.appendChild(label);
       row.appendChild(tags);
       el.lobbyPlayers.appendChild(row);
     });
@@ -216,13 +221,44 @@
   var COLORS = {
     grid: '#1b1f25',
     wall: '#4b5563',
-    food: '#fbbf24',
-    mine: '#4ade80',
-    mineHead: '#bbf7d0',
-    theirs: '#60a5fa',
-    theirsHead: '#bfdbfe',
-    frozen: '#e5e7eb'
+    food: '#f5f5f4',
+    frozen: '#e5e7eb',
+    self: '#ffffff'
   };
+
+  /*
+   * One colour per seat, in join order. Lightness is deliberately varied as
+   * well as hue: green and red read as the same muddy tone to a red-green
+   * colourblind player, so the green is a pale mint and the red is dark. The
+   * white head outline on your own snake means nobody has to tell colours
+   * apart to find themselves.
+   */
+  var PALETTE = [
+    { body: '#4ade80', head: '#bbf7d0', name: 'green' },
+    { body: '#3b82f6', head: '#bfdbfe', name: 'blue' },
+    { body: '#b91c1c', head: '#fca5a5', name: 'red' },
+    { body: '#facc15', head: '#fef08a', name: 'yellow' },
+    { body: '#a855f7', head: '#e9d5ff', name: 'purple' },
+    { body: '#f97316', head: '#fed7aa', name: 'orange' },
+    { body: '#22d3ee', head: '#a5f3fc', name: 'cyan' },
+    { body: '#ec4899', head: '#fbcfe8', name: 'pink' }
+  ];
+
+  function paletteOf(colorIndex) {
+    if (typeof colorIndex !== 'number' || colorIndex < 0 || colorIndex >= PALETTE.length) {
+      return PALETTE[0];
+    }
+    return PALETTE[colorIndex];
+  }
+
+  /** A small square of a player's colour, for the lists. */
+  function swatch(colorIndex) {
+    var box = document.createElement('span');
+    box.className = 'swatch';
+    box.style.background = paletteOf(colorIndex).body;
+    box.title = paletteOf(colorIndex).name;
+    return box;
+  }
 
   function renderGame(state) {
     el.gameCode.textContent = state.room;
@@ -259,10 +295,13 @@
     ctx.lineWidth = 2;
     ctx.strokeRect(1, 1, size - 2, size - 2);
 
+    // Food is a pale dot rather than a colour any player might be wearing.
     ctx.fillStyle = COLORS.food;
     state.food.forEach(function (f) {
-      var pad = cell * 0.25;
-      ctx.fillRect(f.x * cell + pad, f.y * cell + pad, cell - pad * 2, cell - pad * 2);
+      var mid = cell / 2;
+      ctx.beginPath();
+      ctx.arc(f.x * cell + mid, f.y * cell + mid, cell * 0.28, 0, Math.PI * 2);
+      ctx.fill();
     });
 
     state.snakes.forEach(function (snake) {
@@ -271,12 +310,10 @@
   }
 
   function drawSnake(snake, cell) {
-    var mine = snake.id === myPlayerId;
-    var body = mine ? COLORS.mine : COLORS.theirs;
-    var head = mine ? COLORS.mineHead : COLORS.theirsHead;
+    var colors = paletteOf(snake.colorIndex);
 
     snake.body.forEach(function (p, index) {
-      ctx.fillStyle = index === 0 ? head : body;
+      ctx.fillStyle = index === 0 ? colors.head : colors.body;
       ctx.fillRect(p.x * cell, p.y * cell, cell, cell);
     });
 
@@ -287,6 +324,15 @@
       snake.body.forEach(function (p) {
         ctx.strokeRect(p.x * cell + 0.5, p.y * cell + 0.5, cell - 1, cell - 1);
       });
+    }
+
+    // Your own head is ringed in white. Colour alone is not enough to find
+    // yourself at a glance, and it has to survive a colourblind player too.
+    if (snake.id === myPlayerId && snake.body.length > 0) {
+      var head = snake.body[0];
+      ctx.strokeStyle = COLORS.self;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(head.x * cell + 1, head.y * cell + 1, cell - 2, cell - 2);
     }
   }
 
@@ -300,6 +346,7 @@
       var snake = levelById[player.playerId];
       return {
         name: player.name,
+        colorIndex: player.colorIndex,
         connected: player.connected,
         isMe: player.playerId === myPlayerId,
         level: snake ? snake.level : 0,
@@ -320,11 +367,16 @@
         li.className = 'away';
       }
 
+      var label = document.createElement('span');
+      label.className = 'label-with-swatch';
+      label.appendChild(swatch(row.colorIndex));
+
       var name = document.createElement('span');
       name.textContent = row.isMe ? row.name + ' (you)' : row.name;
       if (row.isMe) {
         name.className = 'you';
       }
+      label.appendChild(name);
 
       var stat = document.createElement('span');
       stat.className = 'lvl';
@@ -336,7 +388,7 @@
       }
       stat.textContent = bits.join(' · ');
 
-      li.appendChild(name);
+      li.appendChild(label);
       li.appendChild(stat);
       el.scoreboard.appendChild(li);
     });
