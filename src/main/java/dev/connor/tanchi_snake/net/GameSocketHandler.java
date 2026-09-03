@@ -123,6 +123,7 @@ public class GameSocketHandler extends TextWebSocketHandler {
             case "start" -> ClientCommand.start(sessionId);
             case "turn" -> turnOrNull(sessionId, fields);
             case "playagain" -> ClientCommand.playAgain(sessionId);
+            case "leave" -> ClientCommand.leave(sessionId);
             default -> null;
         };
     }

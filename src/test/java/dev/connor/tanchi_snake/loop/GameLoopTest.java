@@ -116,7 +116,11 @@ class GameLoopTest {
 
         loop.tick();
 
-        assertTrue(rooms.roomOf("s1").playerBySession("s1").name().endsWith(" Snake"));
+        // An adjective and a species, e.g. "Cheerful Viper" or "Sullen Sand Boa".
+        String assigned = rooms.roomOf("s1").playerBySession("s1").name();
+        assertFalse(assigned.isBlank(), "a blank name should have been replaced");
+        assertTrue(assigned.matches("[A-Z][a-z]+ [A-Z][a-z]+( [A-Z][a-z]+)?"),
+                "expected an adjective and a species, got: " + assigned);
     }
 
     @Test

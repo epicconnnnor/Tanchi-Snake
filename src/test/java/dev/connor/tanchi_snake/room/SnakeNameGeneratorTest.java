@@ -10,17 +10,103 @@ import org.junit.jupiter.api.Test;
 
 class SnakeNameGeneratorTest {
 
+    /** Splits on the first space: the adjective is one word, the species may be two. */
+    private static String[] split(String name) {
+        int cut = name.indexOf(' ');
+        return new String[] { name.substring(0, cut), name.substring(cut + 1) };
+    }
+
     @Test
-    void generatedNamesAreAdjectiveColourSnake() {
+    void generatedNamesAreAdjectiveThenSpecies() {
         SnakeNameGenerator names = new SnakeNameGenerator(new Random(1));
         for (int i = 0; i < 200; i++) {
             String name = names.next();
-            String[] parts = name.split(" ");
-            assertEquals(3, parts.length, name);
+            String[] parts = split(name);
             assertTrue(SnakeNameGenerator.ADJECTIVES.contains(parts[0]), name);
-            assertTrue(SnakeNameGenerator.COLORS.contains(parts[1]), name);
-            assertEquals("Snake", parts[2], name);
+            assertTrue(SnakeNameGenerator.SPECIES.contains(parts[1]), name);
         }
+    }
+
+    /*
+     * The colour word is the whole reason this format changed: a player is
+     * given a colour by the room, and a name claiming a different one made
+     * the board look broken.
+     */
+    @Test
+    void noNamePartIsAColour() {
+        Set<String> colours = Set.of(
+                "Green", "Blue", "Red", "Purple", "Orange", "Yellow",
+                "Teal", "Pink", "Silver", "Crimson", "Amber", "Violet");
+        for (String adjective : SnakeNameGenerator.ADJECTIVES) {
+            assertFalse(colours.contains(adjective), adjective);
+        }
+        for (String species : SnakeNameGenerator.SPECIES) {
+            for (String word : species.split(" ")) {
+                assertFalse(colours.contains(word), species);
+            }
+        }
+    }
+
+    @Test
+    void nothingEndsInSnakeAnyMore() {
+        SnakeNameGenerator names = new SnakeNameGenerator(new Random(7));
+        for (int i = 0; i < 200; i++) {
+            String name = names.next();
+            assertFalse(name.endsWith(" Snake"), "the species already says snake: " + name);
+            assertTrue(name.contains(" "), "a name is an adjective and a species: " + name);
+        }
+    }
+
+    /** Every pairing has to fit, not just the ones a seed happens to pick. */
+    @Test
+    void noPairingCanExceedTheGeneratedLimit() {
+        for (String adjective : SnakeNameGenerator.ADJECTIVES) {
+            for (String species : SnakeNameGenerator.SPECIES) {
+                String name = adjective + " " + species;
+                assertTrue(name.length() <= SnakeNameGenerator.MAX_GENERATED_LENGTH,
+                        name + " is " + name.length() + " characters");
+            }
+        }
+    }
+
+    @Test
+    void speciesTooLongForTheLongestAdjectiveAreDropped() {
+        int longestAdjective = SnakeNameGenerator.ADJECTIVES.stream()
+                .mapToInt(String::length).max().orElseThrow();
+        int room = SnakeNameGenerator.MAX_GENERATED_LENGTH - longestAdjective - 1;
+
+        for (String species : SnakeNameGenerator.SPECIES) {
+            assertTrue(species.length() <= room,
+                    species + " cannot sit beside a " + longestAdjective + " character adjective");
+        }
+    }
+
+    @Test
+    void aSpeciesTooLongForTheCapIsDropped() {
+        // Beside an eight character adjective and a space, nine are left.
+        assertEquals(java.util.List.of("Viper", "Boa"),
+                SnakeNameGenerator.withinCap(
+                        java.util.List.of("Viper", "Sidewinder", "Copperhead", "Boa"), 8));
+    }
+
+    @Test
+    void aShorterAdjectiveLeavesRoomForMore() {
+        // Drop the longest adjective to seven and the ten character species fit.
+        assertEquals(java.util.List.of("Viper", "Sidewinder", "Copperhead", "Boa"),
+                SnakeNameGenerator.withinCap(
+                        java.util.List.of("Viper", "Sidewinder", "Copperhead", "Boa"), 7));
+    }
+
+    @Test
+    void thereAreEnoughOfBothToGoRound() {
+        assertTrue(SnakeNameGenerator.ADJECTIVES.size() >= 25,
+                "adjectives: " + SnakeNameGenerator.ADJECTIVES.size());
+        assertTrue(SnakeNameGenerator.SPECIES.size() >= 25,
+                "species: " + SnakeNameGenerator.SPECIES.size());
+        assertEquals(SnakeNameGenerator.ADJECTIVES.size(),
+                new HashSet<>(SnakeNameGenerator.ADJECTIVES).size(), "duplicate adjective");
+        assertEquals(SnakeNameGenerator.SPECIES.size(),
+                new HashSet<>(SnakeNameGenerator.SPECIES).size(), "duplicate species");
     }
 
     @Test
@@ -29,8 +115,9 @@ class SnakeNameGeneratorTest {
 
         for (String blank : new String[] { null, "", "   ", "\t", "\n  " }) {
             String assigned = names.normalise(blank);
-            assertTrue(assigned.endsWith(" Snake"), assigned);
-            assertEquals(3, assigned.split(" ").length, assigned);
+            String[] parts = split(assigned);
+            assertTrue(SnakeNameGenerator.ADJECTIVES.contains(parts[0]), assigned);
+            assertTrue(SnakeNameGenerator.SPECIES.contains(parts[1]), assigned);
         }
     }
 

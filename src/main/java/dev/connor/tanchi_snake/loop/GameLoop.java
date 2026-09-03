@@ -77,6 +77,7 @@ public class GameLoop {
                     }
                     case JOIN -> replyToJoin(c.sessionId(), rooms.join(
                             c.roomCode(), c.sessionId(), c.claimedPlayerId(), c.name()));
+                    case LEAVE -> rooms.leave(c.sessionId());
                     case DISCONNECT -> rooms.disconnect(c.sessionId());
                     default -> {
                         // Not a lobby-level command; the room queue handles it.

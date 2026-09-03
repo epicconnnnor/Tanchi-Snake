@@ -25,8 +25,9 @@ import dev.connor.tanchi_snake.game.Snake;
 public class Room {
 
     public static final int MAX_PLAYERS = 8;
-    public static final int BOARD_WIDTH = 32;
-    public static final int BOARD_HEIGHT = 32;
+    /** The board is square and wraps at every edge. */
+    public static final int BOARD_WIDTH = 48;
+    public static final int BOARD_HEIGHT = 48;
 
     /** Nobody connected for this long and the room is torn down. */
     public static final long EMPTY_TTL_MILLIS = 20_000;
@@ -369,6 +370,12 @@ public class Room {
                 Snake s = snakeOf(p.playerId());
                 if (s != null) {
                     s.stun(FREEZE_STUN_TICKS);
+                    // Being held for an absent player is not the engine's
+                    // stun-forever loop, so it must not count towards the
+                    // death that breaks that loop. This snake is waiting for
+                    // its player, and the disconnect grace period is what
+                    // decides how long that lasts.
+                    s.clearStuckTicks();
                 }
             }
         }
@@ -397,15 +404,36 @@ public class Room {
             if (nowMillis - p.disconnectedAtMillis() < DISCONNECT_GRACE_MILLIS) {
                 continue;
             }
-            Snake s = snakeOf(p.playerId());
-            if (s != null) {
-                p.rememberStanding(s.level(), s.levelReachedTick());
-                state.removeSnake(p.playerId());
-            }
+            releaseSnake(p);
             remove(p.playerId(), nowMillis);
             dropped.add(p.playerId());
         }
         return dropped;
+    }
+
+    /**
+     * A player leaving of their own accord. Their seat goes back immediately
+     * rather than after the reconnect window, but the snake comes off the
+     * board the same way, so the round they walked out of still ranks them.
+     *
+     * @return the player who left, or null if they were not in this room
+     */
+    public Player leaveNow(String playerId, long nowMillis) {
+        Player p = players.get(playerId);
+        if (p == null) {
+            return null;
+        }
+        releaseSnake(p);
+        return remove(playerId, nowMillis);
+    }
+
+    /** Takes a player's snake off the board, keeping the standing it earned. */
+    private void releaseSnake(Player p) {
+        Snake s = snakeOf(p.playerId());
+        if (s != null) {
+            p.rememberStanding(s.level(), s.levelReachedTick());
+            state.removeSnake(p.playerId());
+        }
     }
 
     /** Moves to the results screen once the board has a winner. */

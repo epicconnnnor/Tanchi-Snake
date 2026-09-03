@@ -22,6 +22,8 @@ import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import dev.connor.tanchi_snake.game.Direction;
+import dev.connor.tanchi_snake.game.GameEngine;
+import dev.connor.tanchi_snake.room.Room;
 import dev.connor.tanchi_snake.room.RoomCodeGenerator;
 import tools.jackson.databind.ObjectMapper;
 
@@ -406,17 +408,19 @@ class WebSocketEndToEndTest {
             assertEquals(code, state.room());
             assertEquals("RUNNING", state.phase());
             assertTrue(state.tick() >= 0);
-            assertEquals(32, state.width());
-            assertEquals(32, state.height());
+            assertEquals(Room.BOARD_WIDTH, state.width());
+            assertEquals(Room.BOARD_HEIGHT, state.height());
             assertNotNull(state.hostPlayerId());
-            assertNull(state.winnerSessionId(), "nobody has won yet");
+            assertNull(state.winnerPlayerId(), "nobody has won yet");
             assertTrue(state.standings().isEmpty(), "standings are only for the results screen");
 
             // Food
-            assertEquals(5, state.food().size(), "the board is kept stocked");
-            for (StateMessage.PointView f : state.food()) {
+            assertEquals(GameEngine.FOOD_ON_BOARD, state.food().size(), "the board is kept stocked");
+            for (StateMessage.FoodView f : state.food()) {
                 assertTrue(f.x() >= 0 && f.x() < state.width(), "food off board: " + f);
                 assertTrue(f.y() >= 0 && f.y() < state.height(), "food off board: " + f);
+                assertTrue(f.value() >= 1 && f.value() <= GameEngine.MAX_FOOD_VALUE,
+                        "food worth " + f.value() + " is off the scale");
             }
 
             // Players
@@ -546,6 +550,97 @@ class WebSocketEndToEndTest {
             assertNotNull(after, "the server stopped ticking");
             assertEquals(facing, mySnake(after, host).direction(),
                     "the snake changed course on a direction the server rejected");
+        }
+    }
+
+    @Test
+    void leavingTheLobbyFreesTheSeatForEveryoneElseToSee() throws Exception {
+        try (Client host = connect(); Client guest = connect()) {
+            String code = createRoom(host, "Ann");
+            joinRoom(guest, code, "Bo");
+            assertNotNull(host.awaitState(s -> s.players().size() == 2),
+                    "the guest never showed up");
+
+            guest.send("{\"type\":\"leave\"}");
+
+            StateMessage after = host.awaitState(s -> s.players().size() == 1);
+            assertNotNull(after, "the leaver is still taking up a seat");
+            assertEquals(host.playerId, after.players().get(0).playerId());
+        }
+    }
+
+    @Test
+    void theHostLeavingHandsTheRoomToWhoeverIsLeft() throws Exception {
+        try (Client host = connect(); Client guest = connect()) {
+            String code = createRoom(host, "Ann");
+            joinRoom(guest, code, "Bo");
+            assertNotNull(guest.awaitState(s -> s.players().size() == 2));
+
+            host.send("{\"type\":\"leave\"}");
+
+            StateMessage after = guest.awaitState(
+                    s -> s.players().size() == 1 && guest.playerId.equals(s.hostPlayerId()));
+            assertNotNull(after, "the room never found a new host");
+        }
+    }
+
+    @Test
+    void leavingMidRoundTakesTheSnakeWithIt() throws Exception {
+        try (Client host = connect(); Client guest = connect()) {
+            String code = createRoom(host, "Ann");
+            joinRoom(guest, code, "Bo");
+            assertNotNull(host.awaitState(s -> s.players().size() == 2));
+            host.send("{\"type\":\"start\"}");
+            assertNotNull(host.awaitState(
+                    s -> "RUNNING".equals(s.phase()) && s.snakes().size() == 2),
+                    "the round never got going with both snakes");
+
+            guest.send("{\"type\":\"leave\"}");
+
+            StateMessage after = host.awaitState(s -> s.snakes().size() == 1);
+            assertNotNull(after, "the leaver's snake is still on the board");
+            assertEquals(1, after.players().size());
+            assertEquals("RUNNING", after.phase(), "the round carries on");
+            assertEquals(host.playerId, after.snakes().get(0).id());
+        }
+    }
+
+    @Test
+    void aPlayerWhoLeftComesBackAsANewcomer() throws Exception {
+        try (Client host = connect(); Client guest = connect()) {
+            String code = createRoom(host, "Ann");
+            joinRoom(guest, code, "Bo");
+            assertNotNull(host.awaitState(s -> s.players().size() == 2));
+            String oldId = guest.playerId;
+
+            guest.send("{\"type\":\"leave\"}");
+            assertNotNull(host.awaitState(s -> s.players().size() == 1));
+
+            // The old id is spent: claiming it must not hand back the seat.
+            try (Client returning = connect()) {
+                rejoinRoom(returning, code, oldId);
+                assertNotEquals(oldId, returning.playerId,
+                        "a left seat was handed back to a stale id");
+
+                StateMessage after = host.awaitState(s -> s.players().size() == 2);
+                assertNotNull(after, "the returning player never got a seat");
+            }
+        }
+    }
+
+    @Test
+    void aSoloRoundStartsWithOnePlayerAndNoReadyStep() throws Exception {
+        try (Client solo = connect()) {
+            createRoom(solo, "Alone");
+            // Exactly what the menu's Play solo does: create, then start.
+            solo.send("{\"type\":\"start\"}");
+
+            StateMessage running = solo.awaitState(s -> "RUNNING".equals(s.phase()));
+            assertNotNull(running, "a lone player could not start a round");
+            assertEquals(1, running.players().size());
+            assertEquals(1, running.snakes().size());
+            assertFalse(running.players().get(0).ready(),
+                    "and nobody had to press ready first");
         }
     }
 

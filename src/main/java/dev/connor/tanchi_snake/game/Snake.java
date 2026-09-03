@@ -12,7 +12,8 @@ public class Snake {
     private Direction direction;
     private int level;
     private int stunTicks;
-    private int foodEaten;
+    private int stuckTicks;
+    private int foodValueEaten;
     private int levelReachedTick;
 
     public Snake(String id, Point start, Direction direction) {
@@ -20,7 +21,8 @@ public class Snake {
         this.direction = direction;
         this.level = 1;
         this.stunTicks = 0;
-        this.foodEaten = 0;
+        this.stuckTicks = 0;
+        this.foodValueEaten = 0;
         this.levelReachedTick = 0;
         this.body = new ArrayDeque<>();
         this.body.addFirst(start);
@@ -56,8 +58,24 @@ public class Snake {
         return stunTicks;
     }
 
-    public int foodEaten() {
-        return foodEaten;
+    /**
+     * Consecutive ticks this snake has not moved.
+     *
+     * <p>A stun does not change the board that caused it, so a snake freed
+     * from one often walks straight back into the same collision and is
+     * stunned again. Counting ticks rather than stuns is what makes that
+     * visible: the run survives re-stunning and only a real move clears it.
+     */
+    public int stuckTicks() {
+        return stuckTicks;
+    }
+
+    /**
+     * Food value swallowed since the last level. Food is worth 1, 2 or 3, so
+     * this climbs faster than the number of pieces eaten.
+     */
+    public int foodValueEaten() {
+        return foodValueEaten;
     }
 
     /**
@@ -70,8 +88,12 @@ public class Snake {
 
     // --- mutators ---
 
-    public void move(boolean grow) {
-        Point newHead = head().move(direction);
+    /**
+     * Puts the head on the given cell. The caller works out where that is,
+     * because the edges wrap and a snake knows nothing about the board it is
+     * on.
+     */
+    public void moveTo(Point newHead, boolean grow) {
         body.addFirst(newHead);
         if (!grow) {
             body.removeLast();
@@ -120,11 +142,19 @@ public class Snake {
         }
     }
 
-    public void eat() {
-        foodEaten++;
+    public void noteStuckTick() {
+        stuckTicks++;
+    }
+
+    public void clearStuckTicks() {
+        stuckTicks = 0;
+    }
+
+    public void eat(int foodValue) {
+        foodValueEaten += foodValue;
     }
 
     public void resetFoodEaten() {
-        foodEaten = 0;
+        foodValueEaten = 0;
     }
 }

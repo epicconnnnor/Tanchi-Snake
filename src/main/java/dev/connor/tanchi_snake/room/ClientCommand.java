@@ -24,6 +24,7 @@ public record ClientCommand(
         START,
         TURN,
         PLAY_AGAIN,
+        LEAVE,
         DISCONNECT
     }
 
@@ -61,12 +62,22 @@ public record ClientCommand(
         return new ClientCommand(sessionId, Type.PLAY_AGAIN, null, null, null, null);
     }
 
+    /** Quitting on purpose, as opposed to a socket dropping. */
+    public static ClientCommand leave(String sessionId) {
+        return new ClientCommand(sessionId, Type.LEAVE, null, null, null, null);
+    }
+
     public static ClientCommand disconnect(String sessionId) {
         return new ClientCommand(sessionId, Type.DISCONNECT, null, null, null, null);
     }
 
-    /** True for the commands that make sense before a player is in a room. */
+    /**
+     * True for the commands handled outside any one room's queue. Leaving
+     * belongs here with disconnecting: both take a player out of the room
+     * bookkeeping rather than acting on the board.
+     */
     public boolean isLobbyLevel() {
-        return type == Type.CREATE || type == Type.JOIN || type == Type.DISCONNECT;
+        return type == Type.CREATE || type == Type.JOIN
+                || type == Type.LEAVE || type == Type.DISCONNECT;
     }
 }

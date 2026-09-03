@@ -185,6 +185,36 @@ class RoomLobbyTest {
         assertTrue(room.snakeOf("s2").stunTicks() > 0, "still frozen well past STUN_TICKS");
     }
 
+    /*
+     * The engine kills a snake that has sat still for STUN_DEATH_TICKS, to
+     * break the stand-offs where two snakes stun each other forever. A snake
+     * being held for an absent player is sitting still on purpose, and the
+     * disconnect grace period is what should decide its fate, not that rule.
+     */
+    @Test
+    void aHeldSnakeIsNotKilledOffByTheStuckRule() {
+        Room room = room();
+        seat(room, "s1", "Ann");
+        seat(room, "s2", "Bo");
+        room.startRound("s1");
+        room.markDisconnected("s2", 0);
+
+        Snake held = room.snakeOf("s2");
+        held.setLevel(6);
+        int lengthBefore = held.length();
+
+        GameEngine engine = room.engine();
+        for (int i = 0; i < GameEngine.STUN_DEATH_TICKS * 3; i++) {
+            room.holdDisconnectedSnakes();
+            engine.tick(room.state());
+        }
+
+        assertSame(held, room.snakeOf("s2"), "same snake throughout");
+        assertEquals(6, held.level(), "no death penalty for waiting on its player");
+        assertEquals(lengthBefore, held.length());
+        assertTrue(held.stuckTicks() <= 1, "the hold keeps clearing its run");
+    }
+
     @Test
     void returningWithinTheWindowResumesTheSameSnake() {
         Room room = room();

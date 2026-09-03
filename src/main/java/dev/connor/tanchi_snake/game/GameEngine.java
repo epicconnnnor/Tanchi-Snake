@@ -11,18 +11,50 @@ import java.util.Set;
 
 public class GameEngine {
 
-    public static final int FOOD_PER_LEVEL = 5;
+    /**
+     * Food VALUE a snake must swallow to climb a level, not a number of
+     * pieces. Food averages 1.5 apiece, so 8 is a little over five mouthfuls
+     * -- about what the old flat 5-per-level asked for. Tune it here.
+     */
+    public static final int FOOD_PER_LEVEL = 8;
+
     public static final int TILES_PER_LEVEL = 4;
     public static final int STUN_TICKS = 10;
     public static final int WIN_LEVEL = 10;
 
-    /** How much food the board is kept stocked with. */
-    public static final int FOOD_ON_BOARD = 5;
+    /**
+     * Ticks a snake may sit still before it is killed off and moved on. A
+     * stun freezes a snake without moving whatever stunned it, so the pair
+     * can lock each other in place indefinitely; this is the ceiling on that.
+     * Five seconds at a 100ms tick.
+     */
+    public static final int STUN_DEATH_TICKS = 50;
+
+    /**
+     * How far a snake arriving on the board is kept from every other living
+     * head, as a Chebyshev distance across the wrapping board. Applies to
+     * joiners and to respawns alike: landing next to somebody is the same
+     * unfair start either way. Relaxed to the roomiest cell available when
+     * nothing on the board is this clear.
+     */
+    public static final int RESPAWN_MIN_DISTANCE = 8;
+
+    /** How much food the board is kept stocked with, scaled to a 48x48 board. */
+    public static final int FOOD_ON_BOARD = 12;
+
+    /** The most a single piece of food can be worth. */
+    public static final int MAX_FOOD_VALUE = 3;
+
+    /**
+     * Percentage chance of each food value, from 1 upwards: 60% worth 1, 30%
+     * worth 2, 10% worth 3. Must total 100.
+     */
+    private static final int[] FOOD_VALUE_ODDS = { 60, 30, 10 };
 
     /** Clear cells a snake needs ahead of it to be given a spot. */
     public static final int SPAWN_CLEARANCE = 3;
 
-    /** Random spots tried before falling back to a sweep of the board. */
+    /** Random cells tried before falling back to a sweep of the board. */
     private static final int PLACEMENT_ATTEMPTS = 200;
 
     private final Random random;
@@ -53,7 +85,8 @@ public class GameEngine {
             if (s.stunTicks() > 0) {
                 continue;
             }
-            intended.put(s, s.head().move(s.direction()));
+            // The edges wrap, so this is always a cell on the board.
+            intended.put(s, state.wrap(s.head().move(s.direction())));
         }
 
         // 3. PASS TWO — resolve every outcome against the full picture. Each
@@ -62,19 +95,13 @@ public class GameEngine {
         Set<Snake> dead = new HashSet<>();
         Set<Snake> stunned = new HashSet<>();
 
-        // 3a. Off the board.
-        for (Map.Entry<Snake, Point> e : intended.entrySet()) {
-            if (!state.inBounds(e.getValue())) {
-                dead.add(e.getKey());
-            }
-        }
+        // There is no death by wall: the board wraps, so running into another
+        // snake is the only way off it.
 
         // 3b. Head into head — two or more snakes claiming the same cell.
         Map<Point, List<Snake>> contested = new HashMap<>();
         for (Map.Entry<Snake, Point> e : intended.entrySet()) {
-            if (!dead.contains(e.getKey())) {
-                contested.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(e.getKey());
-            }
+            contested.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(e.getKey());
         }
         for (List<Snake> rivals : contested.values()) {
             if (rivals.size() < 2) {
@@ -140,6 +167,29 @@ public class GameEngine {
         dead.addAll(ranIntoBody);
         intended.keySet().removeAll(ranIntoBody);
 
+        /*
+         * A snake that has sat still too long is not getting free on its own.
+         * Whatever stunned it has not moved either, so on the tick its stun
+         * runs out it aims at the same cell and is stunned all over again.
+         * Killing it is what breaks that loop; it comes back elsewhere.
+         */
+        Set<Snake> stuckTooLong = new HashSet<>();
+        for (Snake s : state.snakes()) {
+            if (intended.containsKey(s)) {
+                continue; // moving this tick; the move clears its run
+            }
+            if (dead.contains(s)) {
+                continue; // already dying, and respawning clears the run
+            }
+            s.noteStuckTick();
+            if (s.stuckTicks() > STUN_DEATH_TICKS) {
+                stuckTooLong.add(s);
+            }
+        }
+        dead.addAll(stuckTooLong);
+        // They are dying, not freezing for another round.
+        stunned.removeAll(stuckTooLong);
+
         // 4. Apply the outcomes.
         // Sorted so that two snakes dying on the same tick are always given
         // their new spots in the same order, keeping placement reproducible
@@ -160,14 +210,17 @@ public class GameEngine {
         for (Map.Entry<Snake, Point> e : intended.entrySet()) {
             Snake s = e.getKey();
             Point newHead = e.getValue();
-            boolean ate = state.food().contains(newHead);
+            int value = state.foodValue(newHead);
+            boolean ate = value > 0;
 
-            s.move(ate);
+            s.moveTo(newHead, ate);
+            // Actually going somewhere is the only thing that clears the run.
+            s.clearStuckTicks();
 
             if (ate) {
                 state.removeFood(newHead);
-                s.eat();
-                if (s.foodEaten() >= FOOD_PER_LEVEL) {
+                s.eat(value);
+                if (s.foodValueEaten() >= FOOD_PER_LEVEL) {
                     s.setLevel(s.level() + 1);
                     // Stamped on the way up only. Ranking compares snakes on
                     // the same level, and the earlier arrival takes it.
@@ -194,6 +247,7 @@ public class GameEngine {
      */
     public Snake spawnSnake(GameState state, String id, Direction direction) {
         Point spot = findSpawn(state, direction, null, Set.of());
+
         if (spot == null) {
             return null;
         }
@@ -224,16 +278,33 @@ public class GameEngine {
     /** Tops the board back up to {@link #FOOD_ON_BOARD} pieces of food. */
     private void replenishFood(GameState state) {
         Set<Point> taken = new HashSet<>(state.occupiedCells());
-        taken.addAll(state.food());
+        taken.addAll(state.food().keySet());
 
         while (state.food().size() < FOOD_ON_BOARD) {
             Point p = findFreeCell(state, taken);
             if (p == null) {
                 break; // board is full; try again next tick
             }
-            state.addFood(p);
+            state.addFood(p, rollFoodValue());
             taken.add(p);
         }
+    }
+
+    /**
+     * Picks what a new piece of food is worth, against
+     * {@link #FOOD_VALUE_ODDS}. Uses the injected Random so a seeded board
+     * plays out the same way twice.
+     */
+    private int rollFoodValue() {
+        int roll = random.nextInt(100);
+        int cumulative = 0;
+        for (int i = 0; i < FOOD_VALUE_ODDS.length; i++) {
+            cumulative += FOOD_VALUE_ODDS[i];
+            if (roll < cumulative) {
+                return i + 1;
+            }
+        }
+        return MAX_FOOD_VALUE;
     }
 
     /** A random cell holding neither snake nor food, or null if there is none. */
@@ -278,7 +349,7 @@ public class GameEngine {
         }
 
         // The old head becomes the first body segment behind the new head.
-        boolean grows = state.food().contains(newHead);
+        boolean grows = state.hasFood(newHead);
         int end = grows ? cells.size() : cells.size() - 1;
         return new HashSet<>(cells.subList(0, end));
     }
@@ -287,6 +358,9 @@ public class GameEngine {
         int newLevel = Math.max(1, s.level() - 2);
         s.setLevel(newLevel);
         s.resetFoodEaten();
+        // A fresh start, whatever state it died in.
+        s.stun(0);
+        s.clearStuckTicks();
 
         Point spot = findSpawn(state, s.direction(), s, claimed);
         if (spot != null) {
@@ -298,47 +372,94 @@ public class GameEngine {
     }
 
     /**
-     * Picks a random cell that nothing else occupies and that
-     * has {@link #SPAWN_CLEARANCE} clear cells ahead of it in the given
-     * direction, so nothing is placed staring straight at a wall.
+     * Picks where a snake arrives, whether it is joining or coming back from a
+     * death. The cell needs {@link #SPAWN_CLEARANCE} free cells ahead of it so
+     * nothing starts nose-first into a body, and it is kept
+     * {@link #RESPAWN_MIN_DISTANCE} from every other living head. When the
+     * board is too crowded for that, the roomiest cell going beats refusing to
+     * place the snake at all.
      *
-     * @return the spot, or null if the board has no room for one
+     * @param arriving the snake being placed, whose own body does not block
+     *                 it; null for a joiner, which has no body yet
+     * @return the spot, or null if the board has nowhere to put it
      */
-    private Point findSpawn(GameState state, Direction direction, Snake ignore, Set<Point> claimed) {
+    private Point findSpawn(GameState state, Direction facing, Snake arriving,
+            Set<Point> claimed) {
         Set<Point> blocked = new HashSet<>(claimed);
+        List<Point> heads = new ArrayList<>();
         for (Snake other : state.snakes()) {
-            if (other != ignore) {
+            if (other != arriving) {
                 blocked.addAll(other.body());
-            }
-        }
-
-        for (int i = 0; i < PLACEMENT_ATTEMPTS; i++) {
-            Point p = new Point(random.nextInt(state.width()), random.nextInt(state.height()));
-            if (hasClearRun(state, blocked, p, direction)) {
-                return p;
-            }
-        }
-
-        // Crowded board: sweep it rather than let the random search give up.
-        for (int y = 0; y < state.height(); y++) {
-            for (int x = 0; x < state.width(); x++) {
-                Point p = new Point(x, y);
-                if (hasClearRun(state, blocked, p, direction)) {
-                    return p;
+                if (other.length() > 0) {
+                    heads.add(other.head());
                 }
             }
         }
-        return null;
+
+        List<Point> roomy = new ArrayList<>();
+        List<Point> furthest = new ArrayList<>();
+        int furthestSoFar = -1;
+
+        for (int y = 0; y < state.height(); y++) {
+            for (int x = 0; x < state.width(); x++) {
+                Point p = new Point(x, y);
+                if (!hasClearRun(state, blocked, p, facing)) {
+                    continue;
+                }
+                int room = distanceToNearestHead(state, p, heads);
+                if (room >= RESPAWN_MIN_DISTANCE) {
+                    roomy.add(p);
+                } else if (room > furthestSoFar) {
+                    furthestSoFar = room;
+                    furthest.clear();
+                    furthest.add(p);
+                } else if (room == furthestSoFar) {
+                    furthest.add(p);
+                }
+            }
+        }
+
+        List<Point> pool = roomy.isEmpty() ? furthest : roomy;
+        if (pool.isEmpty()) {
+            return null;
+        }
+        return pool.get(random.nextInt(pool.size()));
     }
 
-    /** True if the start cell and the run ahead of it are on the board and free. */
+    /** Integer.MAX_VALUE when this snake has the board to itself. */
+    private static int distanceToNearestHead(GameState state, Point p, List<Point> heads) {
+        int nearest = Integer.MAX_VALUE;
+        for (Point head : heads) {
+            nearest = Math.min(nearest, ringDistance(state, p, head));
+        }
+        return nearest;
+    }
+
+    /**
+     * Chebyshev distance, the long way round the board included. The edges
+     * wrap, so two cells either side of one are neighbours, and plain
+     * subtraction would call them the width of the board apart.
+     */
+    static int ringDistance(GameState state, Point a, Point b) {
+        int dx = Math.abs(a.x() - b.x());
+        int dy = Math.abs(a.y() - b.y());
+        return Math.max(
+                Math.min(dx, state.width() - dx),
+                Math.min(dy, state.height() - dy));
+    }
+
+    /**
+     * True if the start cell and the run ahead of it are free. The run wraps
+     * with the board, so no cell is disqualified for being near an edge any
+     * more -- only for being occupied.
+     */
     private boolean hasClearRun(GameState state, Set<Point> blocked, Point start, Direction d) {
-        Point p = start;
+        Point p = state.wrap(start);
         for (int i = 0; i <= SPAWN_CLEARANCE; i++) {
-            if (!state.inBounds(p) || blocked.contains(p)) {
+            if (blocked.contains(p)) {
                 return false;
             }
-            p = p.move(d);
+            p = state.wrap(p.move(d));
         }
         return true;
     }
