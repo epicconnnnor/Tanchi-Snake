@@ -409,7 +409,7 @@ class WebSocketEndToEndTest {
             assertEquals(32, state.width());
             assertEquals(32, state.height());
             assertNotNull(state.hostPlayerId());
-            assertNull(state.winnerSessionId(), "nobody has won yet");
+            assertNull(state.winnerPlayerId(), "nobody has won yet");
             assertTrue(state.standings().isEmpty(), "standings are only for the results screen");
 
             // Food

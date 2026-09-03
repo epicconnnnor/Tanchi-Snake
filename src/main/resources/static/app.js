@@ -43,26 +43,47 @@
 
   var el = {
     banner: document.getElementById('banner'),
+    screenName: document.getElementById('screen-name'),
+
     menu: document.getElementById('menu'),
     lobby: document.getElementById('lobby'),
     game: document.getElementById('game'),
+    results: document.getElementById('results'),
+
+    menuControls: document.getElementById('menu-controls'),
+    lobbyControls: document.getElementById('lobby-controls'),
+    gameControls: document.getElementById('game-controls'),
+    resultsControls: document.getElementById('results-controls'),
+
+    menuForm: document.getElementById('menu-form'),
     name: document.getElementById('name'),
     room: document.getElementById('room'),
     createBtn: document.getElementById('create-btn'),
     joinBtn: document.getElementById('join-btn'),
+
     lobbyCode: document.getElementById('lobby-code'),
+    copyCode: document.getElementById('copy-code'),
+    copyStatus: document.getElementById('copy-status'),
     lobbyPlayers: document.getElementById('lobby-players'),
     lobbyHint: document.getElementById('lobby-hint'),
     readyBtn: document.getElementById('ready-btn'),
     startBtn: document.getElementById('start-btn'),
+
     board: document.getElementById('board'),
-    gameCode: document.getElementById('game-code'),
     gameTick: document.getElementById('game-tick'),
-    gamePhase: document.getElementById('game-phase'),
-    scoreboard: document.getElementById('scoreboard')
+    scoreboard: document.getElementById('scoreboard'),
+    dpad: document.querySelectorAll('.dpad-cell'),
+
+    standings: document.getElementById('standings'),
+    againBtn: document.getElementById('again-btn'),
+    resultsHint: document.getElementById('results-hint'),
+
+    logoBody: document.getElementById('logo-body'),
+    logoDot: document.getElementById('logo-dot')
   };
 
   var ctx = el.board.getContext('2d');
+  var counter = new Intl.NumberFormat();
 
   // --- connection ---------------------------------------------------------
 
@@ -129,10 +150,38 @@
 
   // --- screens ------------------------------------------------------------
 
+  /*
+   * Four screens, one chassis. Each entry names the panel behind the bezel,
+   * the control set under it, and what the marquee and the tab should say.
+   */
+  var SCREENS = {
+    menu: { panel: el.menu, controls: el.menuControls, name: 'MENU', title: 'Tanchi Snake' },
+    lobby: { panel: el.lobby, controls: el.lobbyControls, name: 'LOBBY', title: 'Lobby' },
+    game: { panel: el.game, controls: el.gameControls, name: 'GAME', title: 'Playing' },
+    results: { panel: el.results, controls: el.resultsControls, name: 'RESULTS', title: 'Results' }
+  };
+
+  var current = null;
+
   function show(which) {
-    el.menu.hidden = which !== 'menu';
-    el.lobby.hidden = which !== 'lobby';
-    el.game.hidden = which !== 'game';
+    Object.keys(SCREENS).forEach(function (key) {
+      SCREENS[key].panel.hidden = key !== which;
+      SCREENS[key].controls.hidden = key !== which;
+    });
+
+    var screen = SCREENS[which];
+    el.screenName.textContent = screen.name;
+    document.title = which === 'menu' ? screen.title : screen.title + ' · Tanchi Snake';
+
+    if (which !== current) {
+      current = which;
+      // The wordmark only runs where there is nothing else moving.
+      if (which === 'menu') {
+        startLogo();
+      } else {
+        stopLogo();
+      }
+    }
   }
 
   function showBanner(text) {
@@ -158,56 +207,113 @@
     if (state.phase === 'LOBBY') {
       show('lobby');
       renderLobby(state);
+    } else if (state.phase === 'RESULTS') {
+      show('results');
+      renderResults(state);
     } else {
       show('game');
       renderGame(state);
     }
   }
 
+  // --- shared row pattern -------------------------------------------------
+
+  /*
+   * One row shape on all three list screens: panel background, the player's
+   * colour on the left edge and nowhere else, a name that flexes, and a
+   * right-aligned mono value.
+   */
+  function row(colorIndex) {
+    var li = document.createElement('li');
+    if (typeof colorIndex === 'number') {
+      li.style.borderLeftColor = paletteOf(colorIndex).body;
+    }
+    return li;
+  }
+
+  function nameCell(text, isMe) {
+    var span = document.createElement('span');
+    span.className = 'row-name';
+    span.textContent = text;
+    span.title = text;
+    if (isMe) {
+      var mine = document.createElement('span');
+      mine.className = 'sr-only';
+      mine.textContent = ' (you)';
+      span.appendChild(mine);
+    }
+    return span;
+  }
+
+  function valueCell(text, extraClass) {
+    var span = document.createElement('span');
+    span.className = 'row-value' + (extraClass ? ' ' + extraClass : '');
+    span.textContent = text;
+    return span;
+  }
+
+  function tag(text, extraClass) {
+    var span = document.createElement('span');
+    span.className = 'tag' + (extraClass ? ' ' + extraClass : '');
+    span.textContent = text;
+    return span;
+  }
+
+  /** The white ring the board draws on your own head, repeated in the list. */
+  function youRing() {
+    var ring = document.createElement('span');
+    ring.className = 'you-ring';
+    ring.setAttribute('aria-hidden', 'true');
+    return ring;
+  }
+
+  function emptyNote(list, text) {
+    var li = document.createElement('li');
+    li.className = 'empty';
+    li.textContent = text;
+    list.appendChild(li);
+  }
+
   // --- lobby --------------------------------------------------------------
 
   function renderLobby(state) {
     el.lobbyCode.textContent = state.room;
+    el.copyCode.setAttribute('aria-label', 'Copy room code ' + state.room.split('').join(' '));
     el.lobbyPlayers.innerHTML = '';
 
+    if (state.players.length === 0) {
+      emptyNote(el.lobbyPlayers, 'Nobody here yet.');
+    }
+
     state.players.forEach(function (player) {
-      var row = document.createElement('li');
+      var li = row(player.colorIndex);
+      var isMe = player.playerId === myPlayerId;
       if (!player.connected) {
-        row.className = 'away';
+        li.className = 'is-away';
       }
 
-      var label = document.createElement('span');
-      label.className = 'label-with-swatch';
-      label.appendChild(swatch(player.colorIndex));
-
-      var name = document.createElement('span');
-      name.textContent = player.name;
-      if (player.playerId === myPlayerId) {
-        name.className = 'you';
-        name.textContent = player.name + ' (you)';
+      if (isMe) {
+        li.appendChild(youRing());
       }
-      label.appendChild(name);
-
-      var tags = document.createElement('span');
-      tags.className = 'tags';
-      var parts = [];
+      li.appendChild(nameCell(player.name, isMe));
       if (player.host) {
-        parts.push('host');
+        li.appendChild(tag('HOST', 'tag--host'));
       }
-      parts.push(player.ready ? 'ready' : 'not ready');
       if (!player.connected) {
-        parts.push('away');
+        li.appendChild(tag('AWAY'));
       }
-      tags.textContent = parts.join(' · ');
+      li.appendChild(player.ready
+        ? valueCell('READY', 'is-ready')
+        : valueCell('WAITING'));
 
-      row.appendChild(label);
-      row.appendChild(tags);
-      el.lobbyPlayers.appendChild(row);
+      el.lobbyPlayers.appendChild(li);
     });
 
     var mine = me(state);
-    el.readyBtn.textContent = mine && mine.ready ? 'Not ready' : 'Ready up';
-    el.readyBtn.className = mine && mine.ready ? 'primary' : '';
+    var isReady = !!mine && mine.ready;
+    el.readyBtn.textContent = isReady ? 'Not ready' : 'Ready';
+    el.readyBtn.classList.toggle('is-on', isReady);
+    el.readyBtn.setAttribute('aria-pressed', isReady ? 'true' : 'false');
 
     var isHost = !!mine && mine.host;
     el.startBtn.hidden = !isHost;
@@ -215,6 +321,56 @@
       ? 'You are the host. Start whenever you like.'
       : 'Waiting for the host to start.';
   }
+
+  // --- copy the room code -------------------------------------------------
+
+  var copyResetTimer = null;
+
+  function copyStatus(text, done) {
+    el.copyStatus.textContent = text;
+    el.copyStatus.classList.toggle('is-done', !!done);
+    clearTimeout(copyResetTimer);
+    copyResetTimer = setTimeout(function () {
+      el.copyStatus.textContent = 'Click to copy';
+      el.copyStatus.classList.remove('is-done');
+    }, 2000);
+  }
+
+  /*
+   * A LAN game is served over plain http, where navigator.clipboard does not
+   * exist, so the old execCommand path has to stay as the fallback.
+   */
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+      var scratch = document.createElement('textarea');
+      scratch.value = text;
+      scratch.setAttribute('readonly', '');
+      scratch.style.position = 'fixed';
+      scratch.style.opacity = '0';
+      document.body.appendChild(scratch);
+      scratch.select();
+      var ok = false;
+      try {
+        ok = document.execCommand('copy');
+      } catch (blocked) {
+        ok = false;
+      }
+      document.body.removeChild(scratch);
+      return ok ? resolve() : reject(new Error('copy refused'));
+    });
+  }
+
+  el.copyCode.addEventListener('click', function () {
+    var code = el.lobbyCode.textContent;
+    copyText(code).then(function () {
+      copyStatus('Copied ' + code, true);
+    }, function () {
+      copyStatus('Press Ctrl+C to copy');
+    });
+  });
 
   // --- game ---------------------------------------------------------------
 
@@ -251,7 +407,7 @@
     return PALETTE[colorIndex];
   }
 
-  /** A small square of a player's colour, for the lists. */
+  /** A small square of a player's colour, for the results list. */
   function swatch(colorIndex) {
     var box = document.createElement('span');
     box.className = 'swatch';
@@ -261,12 +417,27 @@
   }
 
   function renderGame(state) {
-    el.gameCode.textContent = state.room;
-    el.gameTick.textContent = state.tick;
-    el.gamePhase.textContent = state.phase;
+    el.gameTick.textContent = counter.format(state.tick);
 
     drawBoard(state);
     drawScores(state);
+    lightDpad(state);
+  }
+
+  /** The D-pad reports the direction the server last had you facing. */
+  function lightDpad(state) {
+    var facing = null;
+    state.snakes.forEach(function (snake) {
+      if (snake.id === myPlayerId) {
+        facing = snake.direction;
+      }
+    });
+
+    for (var i = 0; i < el.dpad.length; i++) {
+      var cell = el.dpad[i];
+      var lit = facing !== null && cell.classList.contains('dpad-' + facing.toLowerCase());
+      cell.classList.toggle('is-lit', lit);
+    }
   }
 
   function drawBoard(state) {
@@ -337,20 +508,19 @@
   }
 
   function drawScores(state) {
-    var levelById = {};
+    var snakeById = {};
     state.snakes.forEach(function (snake) {
-      levelById[snake.id] = snake;
+      snakeById[snake.id] = snake;
     });
 
     var rows = state.players.map(function (player) {
-      var snake = levelById[player.playerId];
+      var snake = snakeById[player.playerId];
       return {
         name: player.name,
         colorIndex: player.colorIndex,
         connected: player.connected,
         isMe: player.playerId === myPlayerId,
         level: snake ? snake.level : 0,
-        length: snake ? snake.length : 0,
         alive: !!snake,
         stunned: !!snake && snake.stunned
       };
@@ -361,37 +531,172 @@
     });
 
     el.scoreboard.innerHTML = '';
-    rows.forEach(function (row) {
-      var li = document.createElement('li');
-      if (!row.connected) {
-        li.className = 'away';
+
+    if (rows.length === 0) {
+      emptyNote(el.scoreboard, 'No players.');
+      return;
+    }
+
+    rows.forEach(function (r) {
+      var li = row(r.colorIndex);
+      if (!r.connected) {
+        li.className = 'is-away';
       }
 
-      var label = document.createElement('span');
-      label.className = 'label-with-swatch';
-      label.appendChild(swatch(row.colorIndex));
-
-      var name = document.createElement('span');
-      name.textContent = row.isMe ? row.name + ' (you)' : row.name;
-      if (row.isMe) {
-        name.className = 'you';
+      if (r.isMe) {
+        li.appendChild(youRing());
       }
-      label.appendChild(name);
-
-      var stat = document.createElement('span');
-      stat.className = 'lvl';
-      var bits = ['lvl ' + row.level, 'len ' + row.length];
-      if (!row.alive) {
-        bits = ['off board'];
-      } else if (row.stunned) {
-        bits.push('frozen');
+      li.appendChild(nameCell(r.name, r.isMe));
+      if (!r.alive) {
+        li.appendChild(tag('OUT'));
+      } else if (r.stunned) {
+        li.appendChild(tag('FROZEN'));
       }
-      stat.textContent = bits.join(' · ');
+      li.appendChild(valueCell('LV ' + r.level));
 
-      li.appendChild(label);
-      li.appendChild(stat);
       el.scoreboard.appendChild(li);
     });
+  }
+
+  // --- results ------------------------------------------------------------
+
+  function renderResults(state) {
+    // Standings carry no colour, so the seat colours come off the player list.
+    // Standing.sessionId holds a playerId, the same way winnerPlayerId does.
+    var colorByPlayer = {};
+    state.players.forEach(function (player) {
+      colorByPlayer[player.playerId] = player.colorIndex;
+    });
+
+    el.standings.innerHTML = '';
+
+    var table = state.standings || [];
+    if (table.length === 0) {
+      emptyNote(el.standings, 'No standings for this round.');
+    }
+
+    table.forEach(function (standing) {
+      var playerId = standing.sessionId;
+      var isMe = playerId === myPlayerId;
+      var li = document.createElement('li');
+
+      // The left edge is the medal here, so the seat colour moves to a swatch.
+      li.className = 'standing standing--' + (standing.rank <= 3 ? standing.rank : 'rest');
+      if (!standing.connected) {
+        li.classList.add('is-away');
+      }
+
+      var rank = document.createElement('span');
+      rank.className = 'standing-rank';
+      rank.textContent = standing.rank;
+      li.appendChild(rank);
+
+      li.appendChild(swatch(colorByPlayer[playerId]));
+      li.appendChild(nameCell(standing.name, isMe));
+
+      if (playerId === state.winnerPlayerId) {
+        li.appendChild(tag('WINNER', 'tag--winner'));
+      }
+      if (!standing.connected) {
+        li.appendChild(tag('AWAY'));
+      }
+      li.appendChild(valueCell('LV ' + standing.level));
+
+      el.standings.appendChild(li);
+    });
+
+    // Only the host can reopen the lobby, so only the host gets the button.
+    var mine = me(state);
+    var isHost = !!mine && mine.host;
+    el.againBtn.hidden = !isHost;
+    el.resultsHint.hidden = isHost;
+  }
+
+  // --- logo ---------------------------------------------------------------
+
+  /*
+   * The wordmark is the game's own grid. Eight cells trace an S-curve - three
+   * right, two down, three right - with food one cell past the head. Every
+   * 400ms the snake takes a step; it eats on the second, grows by one the way
+   * the board would, runs out the tail and starts over.
+   */
+  var LOGO_PATH = [
+    [0, 0], [1, 0], [2, 0],
+    [2, 1], [2, 2],
+    [3, 2], [4, 2], [5, 2],
+    [6, 2], [7, 2], [8, 2]
+  ];
+
+  // [first cell of the body, last cell (the head), is the food still there]
+  var LOGO_FRAMES = [
+    [0, 7, true],
+    [0, 8, false],
+    [1, 9, false],
+    [2, 10, false]
+  ];
+
+  var LOGO_STEP_MS = 400;
+  var logoCells = [];
+  var logoTimer = null;
+  var logoFrame = 0;
+
+  function buildLogo() {
+    if (!el.logoBody) {
+      return;
+    }
+    logoCells = Array.prototype.slice.call(el.logoBody.querySelectorAll('.logo-cell'));
+
+    // The markup holds the eight cells of the resting mark. Eating grows the
+    // snake to nine, so one more cell is needed before the loop can run.
+    var extra = logoCells[0].cloneNode(false);
+    extra.classList.remove('logo-cell--head');
+    el.logoBody.appendChild(extra);
+    logoCells.push(extra);
+  }
+
+  function drawLogo(index) {
+    var frame = LOGO_FRAMES[index];
+    var tail = frame[0];
+    var head = frame[1];
+
+    for (var i = 0; i < logoCells.length; i++) {
+      var at = tail + i;
+      var on = at <= head;
+      var cell = logoCells[i];
+      cell.style.display = on ? '' : 'none';
+      if (on) {
+        cell.setAttribute('x', (LOGO_PATH[at][0] + 0.07).toFixed(2));
+        cell.setAttribute('y', (LOGO_PATH[at][1] + 0.07).toFixed(2));
+        cell.classList.toggle('logo-cell--head', at === head);
+      }
+    }
+
+    el.logoDot.style.display = frame[2] ? '' : 'none';
+  }
+
+  function startLogo() {
+    if (logoTimer !== null || logoCells.length === 0) {
+      return;
+    }
+    // Decorative motion. Anyone who has asked for less gets the resting mark.
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return;
+    }
+    logoTimer = setInterval(function () {
+      logoFrame = (logoFrame + 1) % LOGO_FRAMES.length;
+      drawLogo(logoFrame);
+    }, LOGO_STEP_MS);
+  }
+
+  function stopLogo() {
+    if (logoTimer !== null) {
+      clearInterval(logoTimer);
+      logoTimer = null;
+    }
+    logoFrame = 0;
+    if (logoCells.length > 0) {
+      drawLogo(0);
+    }
   }
 
   // --- input --------------------------------------------------------------
@@ -420,30 +725,54 @@
 
   // --- actions ------------------------------------------------------------
 
-  el.createBtn.addEventListener('click', function () {
+  function createRoom() {
     clearBanner();
-    var name = el.name.value;
+    var name = el.name.value.trim();
     connect(function () {
       send({ type: 'create', name: name });
     });
-  });
+  }
 
-  el.joinBtn.addEventListener('click', function () {
+  function joinRoom() {
     clearBanner();
     var code = el.room.value.trim().toUpperCase();
     if (!code) {
       showBanner('Enter a room code to join.');
+      el.room.focus();
       return;
     }
-    var name = el.name.value;
+    var name = el.name.value.trim();
     connect(function () {
       send({ type: 'join', room: code, name: name });
     });
+  }
+
+  // Both buttons submit the one form, which is what carries Enter into here.
+  el.menuForm.addEventListener('submit', function (event) {
+    event.preventDefault();
+    if (event.submitter === el.joinBtn) {
+      joinRoom();
+    } else {
+      createRoom();
+    }
+  });
+
+  /*
+   * Implicit submission would always pick the first button in the form,
+   * whichever field you were in. Each field says for itself what Enter means:
+   * a name on its own creates a room, a room code joins one.
+   */
+  el.name.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      createRoom();
+    }
   });
 
   el.room.addEventListener('keydown', function (event) {
     if (event.key === 'Enter') {
-      el.joinBtn.click();
+      event.preventDefault();
+      joinRoom();
     }
   });
 
@@ -455,7 +784,13 @@
     send({ type: 'start' });
   });
 
+  el.againBtn.addEventListener('click', function () {
+    send({ type: 'playagain' });
+  });
+
   // --- boot ---------------------------------------------------------------
+
+  buildLogo();
 
   var savedRoom = recall(STORE_ROOM);
   if (myPlayerId && savedRoom) {

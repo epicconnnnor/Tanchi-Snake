@@ -2,57 +2,160 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#101014">
   <title>Tanchi Snake</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <div id="banner" class="banner" hidden></div>
+  <a class="skip-link" href="#screen">Skip to content</a>
 
-  <!-- 1. MENU -->
-  <section id="menu" class="screen">
-    <h1>Tanchi Snake</h1>
-    <label for="name">Snake name</label>
-    <input id="name" type="text" maxlength="20" placeholder="leave blank for a random one" autocomplete="off">
+  <div class="cabinet">
 
-    <div class="row">
-      <button id="create-btn" type="button">Create room</button>
+    <!-- Marquee: the one piece of chrome that never changes. -->
+    <header class="marquee">
+      <h1 class="logo">
+        <!--
+          The wordmark is the game's own grid: an eight-cell snake in an
+          S-curve with a food dot one cell ahead of its head. app.js walks it
+          forward on the menu screen; every other screen leaves it at rest.
+        -->
+        <svg class="logo-mark" viewBox="0 0 9 3" width="90" height="30"
+             role="img" aria-label="Tanchi Snake" focusable="false">
+          <g id="logo-body">
+            <rect class="logo-cell" x="0.07" y="0.07" width="0.86" height="0.86" rx="0.1"></rect>
+            <rect class="logo-cell" x="1.07" y="0.07" width="0.86" height="0.86" rx="0.1"></rect>
+            <rect class="logo-cell" x="2.07" y="0.07" width="0.86" height="0.86" rx="0.1"></rect>
+            <rect class="logo-cell" x="2.07" y="1.07" width="0.86" height="0.86" rx="0.1"></rect>
+            <rect class="logo-cell" x="2.07" y="2.07" width="0.86" height="0.86" rx="0.1"></rect>
+            <rect class="logo-cell" x="3.07" y="2.07" width="0.86" height="0.86" rx="0.1"></rect>
+            <rect class="logo-cell" x="4.07" y="2.07" width="0.86" height="0.86" rx="0.1"></rect>
+            <rect class="logo-cell logo-cell--head" x="5.07" y="2.07" width="0.86" height="0.86" rx="0.1"></rect>
+          </g>
+          <circle id="logo-dot" class="logo-dot" cx="6.5" cy="2.5" r="0.32"></circle>
+        </svg>
+        <span class="logo-word" translate="no">
+          <span class="logo-tanchi">TANCHI</span>
+          <span class="logo-snake">SNAKE</span>
+        </span>
+      </h1>
+      <p id="screen-name" class="screen-name" translate="no">MENU</p>
+    </header>
+
+    <p id="banner" class="banner" role="status" hidden></p>
+
+    <!-- Screen recess: the only part of the cabinet that changes. -->
+    <div class="recess" id="screen" tabindex="-1">
+
+      <!-- 1. MENU -->
+      <section id="menu" class="screen screen--menu" aria-labelledby="menu-title">
+        <h2 id="menu-title" class="sr-only">Menu</h2>
+        <form id="menu-form" class="menu-form" novalidate>
+          <div>
+            <label class="field-label" for="name">Snake name</label>
+            <input id="name" name="name" type="text" maxlength="20"
+                   placeholder="Leave blank for a random one…"
+                   autocomplete="nickname" spellcheck="false" enterkeyhint="go">
+          </div>
+          <div>
+            <label class="field-label" for="room">Room code</label>
+            <input id="room" name="room" class="room-input" type="text" maxlength="4"
+                   placeholder="ABCD" autocomplete="off" spellcheck="false"
+                   autocapitalize="characters" inputmode="text" enterkeyhint="go"
+                   translate="no">
+          </div>
+        </form>
+      </section>
+
+      <!-- 2. LOBBY -->
+      <section id="lobby" class="screen screen--lobby" hidden aria-labelledby="lobby-title">
+        <h2 id="lobby-title" class="sr-only">Lobby</h2>
+
+        <div class="lobby-code">
+          <p class="field-label" id="room-label">Room</p>
+          <button id="copy-code" class="room-code" type="button"
+                  aria-describedby="copy-status">
+            <span id="lobby-code" class="room-code-value" translate="no">····</span>
+          </button>
+          <p id="copy-status" class="copy-status" role="status">Click to copy</p>
+        </div>
+
+        <div class="lobby-roster">
+          <p class="field-label" id="roster-label">Lobby</p>
+          <ul id="lobby-players" class="rows" aria-labelledby="roster-label"></ul>
+          <p id="lobby-hint" class="hint">Waiting for the host to start.</p>
+        </div>
+      </section>
+
+      <!-- 3. GAME -->
+      <section id="game" class="screen screen--game" hidden aria-labelledby="game-title">
+        <h2 id="game-title" class="sr-only">Game</h2>
+
+        <div class="board-wrap">
+          <canvas id="board" width="512" height="512" role="img"
+                  aria-label="Game board. Your snake wears a white ring on its head."></canvas>
+        </div>
+
+        <aside class="scorepanel">
+          <p class="field-label" id="scoreboard-label">Scoreboard</p>
+          <ol id="scoreboard" class="rows" aria-labelledby="scoreboard-label"></ol>
+          <p class="tickline">
+            <span class="field-label">Tick</span>
+            <span id="game-tick" class="tick-value" translate="no">0</span>
+          </p>
+        </aside>
+      </section>
+
+      <!-- 4. RESULTS -->
+      <section id="results" class="screen screen--results" hidden aria-labelledby="results-title">
+        <h2 id="results-title" class="sr-only">Results</h2>
+        <p class="field-label" id="standings-label">Final standings</p>
+        <ol id="standings" class="rows rows--standings" aria-labelledby="standings-label"></ol>
+      </section>
+
     </div>
 
-    <div class="divider">or</div>
+    <!-- Control strip: one per screen, all in the same slot. -->
+    <div class="controls">
 
-    <label for="room">Room code</label>
-    <input id="room" type="text" maxlength="4" placeholder="ABCD" autocomplete="off" spellcheck="false">
-    <div class="row">
-      <button id="join-btn" type="button">Join room</button>
+      <div id="menu-controls" class="control-set">
+        <button id="create-btn" class="btn btn--red" type="submit" form="menu-form">Create room</button>
+        <button id="join-btn" class="btn btn--gold" type="submit" form="menu-form">Join</button>
+      </div>
+
+      <div id="lobby-controls" class="control-set" hidden>
+        <button id="ready-btn" class="btn btn--green" type="button">Ready</button>
+        <button id="start-btn" class="btn btn--red" type="button" hidden>Start round</button>
+      </div>
+
+      <div id="game-controls" class="control-set control-set--game" hidden>
+        <!--
+          Cabinet hardware, not controls: the D-pad reports the direction the
+          server last had you facing, and the lamp is moulded into the chassis.
+          Steering is the keyboard, as it has always been.
+        -->
+        <div class="dpad" aria-hidden="true">
+          <span class="dpad-cell dpad-up"></span>
+          <span class="dpad-cell dpad-left"></span>
+          <span class="dpad-cell dpad-mid"></span>
+          <span class="dpad-cell dpad-right"></span>
+          <span class="dpad-cell dpad-down"></span>
+        </div>
+        <div class="control-right">
+          <p class="keyhint" translate="no">WASD / ARROWS</p>
+          <span class="lamp" aria-hidden="true"></span>
+        </div>
+      </div>
+
+      <div id="results-controls" class="control-set" hidden>
+        <p id="results-hint" class="hint" hidden>Waiting for the host to open the lobby.</p>
+        <button id="again-btn" class="btn btn--red" type="button" hidden>Back to lobby</button>
+      </div>
+
     </div>
-  </section>
-
-  <!-- 2. LOBBY -->
-  <section id="lobby" class="screen" hidden>
-    <p class="label">Room code</p>
-    <p id="lobby-code" class="code">----</p>
-
-    <ul id="lobby-players" class="players"></ul>
-
-    <div class="row">
-      <button id="ready-btn" type="button">Ready up</button>
-      <button id="start-btn" type="button" hidden>Start round</button>
-    </div>
-    <p id="lobby-hint" class="hint">Waiting for the host to start.</p>
-  </section>
-
-  <!-- 3. GAME -->
-  <section id="game" class="screen game" hidden>
-    <canvas id="board" width="512" height="512"></canvas>
-    <aside class="sidebar">
-      <p class="label">Room <span id="game-code" class="mono"></span></p>
-      <p class="label">Tick <span id="game-tick" class="mono">0</span> &middot; <span id="game-phase" class="mono">-</span></p>
-      <ol id="scoreboard" class="scores"></ol>
-      <p class="hint">WASD or arrow keys to steer. Your snake has a white ring on its head.</p>
-    </aside>
-  </section>
+  </div>
 
   <script src="app.js"></script>
 </body>

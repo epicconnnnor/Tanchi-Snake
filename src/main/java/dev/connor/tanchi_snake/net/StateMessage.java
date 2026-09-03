@@ -22,7 +22,7 @@ public record StateMessage(
         int width,
         int height,
         String hostPlayerId,
-        String winnerSessionId,
+        String winnerPlayerId,
         List<SnakeView> snakes,
         List<PointView> food,
         List<PlayerView> players,
