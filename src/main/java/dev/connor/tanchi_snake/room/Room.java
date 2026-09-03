@@ -370,6 +370,12 @@ public class Room {
                 Snake s = snakeOf(p.playerId());
                 if (s != null) {
                     s.stun(FREEZE_STUN_TICKS);
+                    // Being held for an absent player is not the engine's
+                    // stun-forever loop, so it must not count towards the
+                    // death that breaks that loop. This snake is waiting for
+                    // its player, and the disconnect grace period is what
+                    // decides how long that lasts.
+                    s.clearStuckTicks();
                 }
             }
         }

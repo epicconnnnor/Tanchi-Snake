@@ -22,6 +22,21 @@ public class GameEngine {
     public static final int STUN_TICKS = 10;
     public static final int WIN_LEVEL = 10;
 
+    /**
+     * Ticks a snake may sit still before it is killed off and moved on. A
+     * stun freezes a snake without moving whatever stunned it, so the pair
+     * can lock each other in place indefinitely; this is the ceiling on that.
+     * Five seconds at a 100ms tick.
+     */
+    public static final int STUN_DEATH_TICKS = 50;
+
+    /**
+     * How far a respawning snake is kept from every other living head, as a
+     * Chebyshev distance across the wrapping board. Relaxed to the roomiest
+     * cell available when nothing on the board is this clear.
+     */
+    public static final int RESPAWN_MIN_DISTANCE = 8;
+
     /** How much food the board is kept stocked with, scaled to a 48x48 board. */
     public static final int FOOD_ON_BOARD = 12;
 
@@ -150,6 +165,29 @@ public class GameEngine {
         dead.addAll(ranIntoBody);
         intended.keySet().removeAll(ranIntoBody);
 
+        /*
+         * A snake that has sat still too long is not getting free on its own.
+         * Whatever stunned it has not moved either, so on the tick its stun
+         * runs out it aims at the same cell and is stunned all over again.
+         * Killing it is what breaks that loop; it comes back elsewhere.
+         */
+        Set<Snake> stuckTooLong = new HashSet<>();
+        for (Snake s : state.snakes()) {
+            if (intended.containsKey(s)) {
+                continue; // moving this tick; the move clears its run
+            }
+            if (dead.contains(s)) {
+                continue; // already dying, and respawning clears the run
+            }
+            s.noteStuckTick();
+            if (s.stuckTicks() > STUN_DEATH_TICKS) {
+                stuckTooLong.add(s);
+            }
+        }
+        dead.addAll(stuckTooLong);
+        // They are dying, not freezing for another round.
+        stunned.removeAll(stuckTooLong);
+
         // 4. Apply the outcomes.
         // Sorted so that two snakes dying on the same tick are always given
         // their new spots in the same order, keeping placement reproducible
@@ -174,6 +212,8 @@ public class GameEngine {
             boolean ate = value > 0;
 
             s.moveTo(newHead, ate);
+            // Actually going somewhere is the only thing that clears the run.
+            s.clearStuckTicks();
 
             if (ate) {
                 state.removeFood(newHead);
@@ -315,8 +355,11 @@ public class GameEngine {
         int newLevel = Math.max(1, s.level() - 2);
         s.setLevel(newLevel);
         s.resetFoodEaten();
+        // A fresh start, whatever state it died in.
+        s.stun(0);
+        s.clearStuckTicks();
 
-        Point spot = findSpawn(state, s.direction(), s, claimed);
+        Point spot = findRespawn(state, s.direction(), s, claimed);
         if (spot != null) {
             s.respawnAt(spot);
         }
@@ -357,6 +400,80 @@ public class GameEngine {
             }
         }
         return null;
+    }
+
+    /**
+     * Picks where a killed snake comes back. Same clearance rule as a joiner,
+     * plus room from everyone else: a cell at least
+     * {@link #RESPAWN_MIN_DISTANCE} from every other living head. When the
+     * board is too crowded for that, the roomiest cell going is better than
+     * refusing to place the snake at all.
+     *
+     * @return the spot, or null if the board has nowhere to put it
+     */
+    private Point findRespawn(GameState state, Direction facing, Snake reviving,
+            Set<Point> claimed) {
+        Set<Point> blocked = new HashSet<>(claimed);
+        List<Point> heads = new ArrayList<>();
+        for (Snake other : state.snakes()) {
+            if (other != reviving) {
+                blocked.addAll(other.body());
+                if (other.length() > 0) {
+                    heads.add(other.head());
+                }
+            }
+        }
+
+        List<Point> roomy = new ArrayList<>();
+        List<Point> furthest = new ArrayList<>();
+        int furthestSoFar = -1;
+
+        for (int y = 0; y < state.height(); y++) {
+            for (int x = 0; x < state.width(); x++) {
+                Point p = new Point(x, y);
+                if (!hasClearRun(state, blocked, p, facing)) {
+                    continue;
+                }
+                int room = distanceToNearestHead(state, p, heads);
+                if (room >= RESPAWN_MIN_DISTANCE) {
+                    roomy.add(p);
+                } else if (room > furthestSoFar) {
+                    furthestSoFar = room;
+                    furthest.clear();
+                    furthest.add(p);
+                } else if (room == furthestSoFar) {
+                    furthest.add(p);
+                }
+            }
+        }
+
+        List<Point> pool = roomy.isEmpty() ? furthest : roomy;
+        if (pool.isEmpty()) {
+            return null;
+        }
+        return pool.get(random.nextInt(pool.size()));
+    }
+
+    /** Integer.MAX_VALUE when this snake has the board to itself. */
+    private static int distanceToNearestHead(GameState state, Point p, List<Point> heads) {
+        int nearest = Integer.MAX_VALUE;
+        for (Point head : heads) {
+            nearest = Math.min(nearest, ringDistance(state, p, head));
+        }
+        return nearest;
+    }
+
+    /**
+     * Chebyshev distance, the long way round the board included. The edges
+     * wrap, so two cells either side of one are neighbours, and plain
+     * subtraction would call them the width of the board apart.
+     */
+    static int ringDistance(GameState state, Point a, Point b) {
+        int dx = Math.abs(a.x() - b.x());
+        int dy = Math.abs(a.y() - b.y());
+        return Math.max(
+                Math.min(dx, state.width() - dx),
+                Math.min(dy, state.height() - dy));
     }
 
     /**

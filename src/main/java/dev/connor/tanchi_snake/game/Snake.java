@@ -12,6 +12,7 @@ public class Snake {
     private Direction direction;
     private int level;
     private int stunTicks;
+    private int stuckTicks;
     private int foodValueEaten;
     private int levelReachedTick;
 
@@ -20,6 +21,7 @@ public class Snake {
         this.direction = direction;
         this.level = 1;
         this.stunTicks = 0;
+        this.stuckTicks = 0;
         this.foodValueEaten = 0;
         this.levelReachedTick = 0;
         this.body = new ArrayDeque<>();
@@ -54,6 +56,18 @@ public class Snake {
 
     public int stunTicks() {
         return stunTicks;
+    }
+
+    /**
+     * Consecutive ticks this snake has not moved.
+     *
+     * <p>A stun does not change the board that caused it, so a snake freed
+     * from one often walks straight back into the same collision and is
+     * stunned again. Counting ticks rather than stuns is what makes that
+     * visible: the run survives re-stunning and only a real move clears it.
+     */
+    public int stuckTicks() {
+        return stuckTicks;
     }
 
     /**
@@ -126,6 +140,14 @@ public class Snake {
         if (stunTicks > 0) {
             stunTicks--;
         }
+    }
+
+    public void noteStuckTick() {
+        stuckTicks++;
+    }
+
+    public void clearStuckTicks() {
+        stuckTicks = 0;
     }
 
     public void eat(int foodValue) {
