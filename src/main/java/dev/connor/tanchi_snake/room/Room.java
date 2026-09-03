@@ -40,6 +40,9 @@ public class Room {
     /** Places highlighted on the results screen. */
     public static final int PODIUM_SIZE = 3;
 
+    /** Colour slots, one per seat. */
+    public static final int COLOR_COUNT = MAX_PLAYERS;
+
     /**
      * Stun topped back up every tick while a player is away. Small on purpose:
      * the loop reapplies it, so the freeze does not depend on the tick rate.
@@ -146,12 +149,36 @@ public class Room {
         if (isFull()) {
             return null;
         }
+        p.setColorIndex(lowestFreeColor());
         players.put(p.playerId(), p);
         if (hostPlayerId == null) {
             hostPlayerId = p.playerId();
         }
         emptySinceMillis = NOT_EMPTY;
         return p;
+    }
+
+    /**
+     * The lowest colour slot nobody in this room is using. A player leaving
+     * frees theirs, and the next arrival takes it rather than pushing everyone
+     * further down the palette.
+     */
+    private int lowestFreeColor() {
+        boolean[] taken = new boolean[COLOR_COUNT];
+        for (Player seated : players.values()) {
+            int c = seated.colorIndex();
+            if (c >= 0 && c < COLOR_COUNT) {
+                taken[c] = true;
+            }
+        }
+        for (int i = 0; i < COLOR_COUNT; i++) {
+            if (!taken[i]) {
+                return i;
+            }
+        }
+        // Unreachable while the seat count and the palette match, but a colour
+        // is better than a crash if they ever drift apart.
+        return 0;
     }
 
     /** Drops a player for good. Contrast with {@link #markDisconnected}. */

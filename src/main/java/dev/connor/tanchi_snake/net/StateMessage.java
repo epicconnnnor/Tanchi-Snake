@@ -34,6 +34,7 @@ public record StateMessage(
     public record SnakeView(
             String id,
             String name,
+            int colorIndex,
             int level,
             int length,
             boolean stunned,
@@ -44,6 +45,7 @@ public record StateMessage(
     public record PlayerView(
             String playerId,
             String name,
+            int colorIndex,
             boolean ready,
             boolean connected,
             boolean host) {
@@ -60,6 +62,7 @@ public record StateMessage(
             snakes.add(new SnakeView(
                     s.id(),
                     owner == null ? s.id() : owner.name(),
+                    owner == null ? 0 : owner.colorIndex(),
                     s.level(),
                     s.length(),
                     s.stunTicks() > 0,
@@ -72,6 +75,7 @@ public record StateMessage(
             players.add(new PlayerView(
                     p.playerId(),
                     p.name(),
+                    p.colorIndex(),
                     p.isReady(),
                     p.isConnected(),
                     room.isHost(p.playerId())));

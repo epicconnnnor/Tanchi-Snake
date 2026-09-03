@@ -18,6 +18,10 @@ public class Player {
     private long disconnectedAtMillis;
     private int lastKnownLevel;
     private int lastKnownLevelTick;
+    private int colorIndex = UNASSIGNED;
+
+    /** Colour slot before a room has handed one out. */
+    public static final int UNASSIGNED = -1;
 
     public Player(String playerId, String sessionId, String name) {
         this.playerId = playerId;
@@ -25,6 +29,18 @@ public class Player {
         this.name = name;
         this.ready = false;
         this.connected = true;
+    }
+
+    /**
+     * Which colour this player draws in, assigned by the room on arrival and
+     * held for the life of the seat, so it survives a reconnect.
+     */
+    public int colorIndex() {
+        return colorIndex;
+    }
+
+    public void setColorIndex(int colorIndex) {
+        this.colorIndex = colorIndex;
     }
 
     /** Stable for as long as the player holds the seat. Keys their snake. */
