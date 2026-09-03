@@ -3,6 +3,36 @@
  * never move; only what sits behind the bezel changes.
  */
 
+/*
+ * Self-hosted so the cabinet works with no network: this is a game people
+ * run on localhost. Latin subsets only, which is all the interface uses.
+ * Both fall back to a monospace stack, whose fixed advance is the closest
+ * match for a pixel font while the real one is still loading.
+ */
+@font-face {
+  font-family: "Silkscreen";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/silkscreen-400.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Silkscreen";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/silkscreen-700.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "VT323";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/vt323-400.woff2") format("woff2");
+}
+
 :root {
   color-scheme: dark;
 
@@ -24,8 +54,14 @@
   --silver: #b9bec9;
   --bronze: #c8823c;
 
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Machine lettering: labels, tags, the wordmark. */
+  --font-display: "Silkscreen", ui-monospace, SFMono-Regular, Consolas, monospace;
+
+  /* Numbers, and only numbers: room code, levels, the clock. */
+  --font-mono: "VT323", ui-monospace, SFMono-Regular, Consolas, monospace;
+
+  /* Anything a person wrote, or has to read at length. */
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -38,7 +74,7 @@ body {
            max(16px, env(safe-area-inset-left));
   background: var(--recess);
   color: var(--text);
-  font: 14px/1.5 var(--sans);
+  font: 14px/1.5 var(--font-body);
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -82,7 +118,7 @@ body {
 /* --- chassis ------------------------------------------------------------ */
 
 .cabinet {
-  max-width: 864px;
+  max-width: 882px;
   margin: 0 auto;
   background: var(--chassis);
   border: 0.5px solid var(--edge);
@@ -127,10 +163,10 @@ body {
 .logo-word {
   display: flex;
   flex-direction: column;
-  font-family: var(--mono);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.3;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
   letter-spacing: 4px;
   /* Letter-spacing hangs off the last glyph; pull the block back to sit flush. */
   margin-right: -4px;
@@ -146,9 +182,9 @@ body {
 
 .marquee-code {
   margin: 0 -4px 2px 0;
-  font-family: var(--mono);
-  font-size: 15px;
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 400;
   line-height: 1.1;
   letter-spacing: 4px;
   color: var(--gold);
@@ -156,8 +192,8 @@ body {
 
 .screen-name {
   margin: 0 -3px 0 0;
-  font-family: var(--mono);
-  font-size: 11px;
+  font-family: var(--font-display);
+  font-size: 9px;
   letter-spacing: 3px;
   color: var(--dim);
 }
@@ -249,7 +285,7 @@ body {
   border: 1px solid var(--edge);
   border-radius: 6px;
   color: var(--text);
-  font-family: var(--sans);
+  font-family: var(--font-body);
   font-size: 14px;
   cursor: pointer;
   touch-action: manipulation;
@@ -319,9 +355,9 @@ body {
 .field-label {
   display: block;
   margin: 0 0 6px;
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 8px;
+  font-weight: 400;
   letter-spacing: 3px;
   text-transform: uppercase;
   color: var(--dim);
@@ -342,7 +378,7 @@ input {
   border: 1px solid var(--edge);
   border-radius: 6px;
   color: var(--text);
-  font-family: var(--sans);
+  font-family: var(--font-body);
   /* 16px keeps iOS from zooming the whole cabinet on focus. */
   font-size: 16px;
   transition: border-color 120ms ease;
@@ -354,9 +390,11 @@ input:hover { border-color: #3a3a45; }
 
 input:focus-visible { border-color: var(--text); }
 
+/* An input is somewhere people type, so it keeps the body face. */
 .room-input {
-  font-family: var(--mono);
-  font-size: 20px;
+  font-family: var(--font-body);
+  font-size: 18px;
+  font-weight: 600;
   letter-spacing: 6px;
   text-transform: uppercase;
 }
@@ -407,9 +445,9 @@ input:focus-visible { border-color: var(--text); }
 .room-code-value {
   display: block;
   margin-right: -5px;
-  font-family: var(--mono);
-  font-size: 34px;
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 39px;
+  font-weight: 400;
   line-height: 1.15;
   letter-spacing: 5px;
   color: var(--gold);
@@ -417,8 +455,8 @@ input:focus-visible { border-color: var(--text); }
 
 .copy-status {
   margin: 8px 0 0;
-  font-family: var(--mono);
-  font-size: 10px;
+  font-family: var(--font-display);
+  font-size: 8px;
   letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--dim);
@@ -454,7 +492,7 @@ input:focus-visible { border-color: var(--text); }
   display: flex;
   flex: none;
   flex-direction: column;
-  width: 190px;
+  width: 208px;
   min-height: 576px;
 }
 
@@ -471,8 +509,8 @@ input:focus-visible { border-color: var(--text); }
 .tickline .field-label { margin: 0; }
 
 .tick-value {
-  font-family: var(--mono);
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   letter-spacing: 1px;
   color: var(--dim);
@@ -502,8 +540,8 @@ input:focus-visible { border-color: var(--text); }
 
 .keyhint {
   margin: 0 -3px 0 0;
-  font-family: var(--mono);
-  font-size: 10px;
+  font-family: var(--font-display);
+  font-size: 8px;
   letter-spacing: 3px;
   color: var(--dim);
 }
@@ -527,8 +565,8 @@ input:focus-visible { border-color: var(--text); }
 .standing-rank {
   flex: none;
   width: 20px;
-  font-family: var(--mono);
-  font-size: 12px;
+  font-family: var(--font-display);
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
   color: var(--dim);
   text-align: right;
@@ -570,9 +608,9 @@ input:focus-visible { border-color: var(--text); }
 .rows li {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-height: 34px;
-  padding: 5px 10px;
+  padding: 5px 8px;
   background: var(--panel);
   /* The only colour a row carries is the player's, on this edge. */
   border-left: 2px solid var(--edge);
@@ -585,19 +623,36 @@ input:focus-visible { border-color: var(--text); }
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  font-size: 13px;
+  /* Sized so the longest name the generator can make, "Restless Crimson
+     Snake", clears the panel without an ellipsis even at LV 10. Body face:
+     these are names people chose. */
+  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* READY, WAITING and the like. */
 .row-value {
   flex: none;
-  font-family: var(--mono);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-display);
+  font-size: 8px;
   letter-spacing: 1px;
   color: var(--dim);
   text-align: right;
+}
+
+/* LV counts, which are numbers and belong in the number face. */
+.row-value--number {
+  /* Wide enough for LV 10, so the name column does not shrink when
+     somebody levels into double digits. */
+  min-width: 32px;
+  /* A level is the score, not a label: it reads at full contrast. */
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  line-height: 1.1;
 }
 
 .row-value.is-ready { color: var(--green); }
@@ -607,8 +662,8 @@ input:focus-visible { border-color: var(--text); }
   padding: 1px 5px;
   border: 1px solid currentColor;
   border-radius: 3px;
-  font-family: var(--mono);
-  font-size: 9px;
+  font-family: var(--font-display);
+  font-size: 8px;
   letter-spacing: 1px;
   color: var(--dim);
 }
@@ -619,8 +674,8 @@ input:focus-visible { border-color: var(--text); }
 /* The same white ring the board draws on your own head. */
 .you-ring {
   flex: none;
-  width: 11px;
-  height: 11px;
+  width: 9px;
+  height: 9px;
   border: 2px solid var(--text);
   border-radius: 2px;
 }
@@ -643,7 +698,7 @@ input:focus-visible { border-color: var(--text); }
 }
 
 .colophon {
-  max-width: 864px;
+  max-width: 882px;
   margin: 16px auto 0;
   color: var(--dim);
   font-size: 11px;

@@ -664,7 +664,7 @@
       } else if (r.stunned) {
         li.appendChild(tag('FROZEN'));
       }
-      li.appendChild(valueCell('LV ' + r.level));
+      li.appendChild(valueCell('LV ' + r.level, 'row-value--number'));
 
       el.scoreboard.appendChild(li);
     });
@@ -712,7 +712,7 @@
       if (!standing.connected) {
         li.appendChild(tag('AWAY'));
       }
-      li.appendChild(valueCell('LV ' + standing.level));
+      li.appendChild(valueCell('LV ' + standing.level, 'row-value--number'));
 
       el.standings.appendChild(li);
     });
