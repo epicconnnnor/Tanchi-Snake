@@ -1,13 +1,22 @@
-# 🐍 Tanchi Snake
-
-A real-time multiplayer Snake game built with Java, Spring Boot, and WebSockets.
-
-Players can join the same game and control their own snake in real time. The server maintains the authoritative game state and handles movement and collision detection.
-
 ## 🎮 Live Demo
 
 **Play Tanchi Snake:**  
 https://tanchi-snake.duckdns.org
+
+
+# 🐍 Tanchi Snake
+
+<p align="center">
+  <img src="assets/Tan-chi-snake.png" alt="Tanchi Snake" width="500">
+</p>
+
+A real-time multiplayer Snake game built with Java, Spring Boot, and WebSockets.
+
+## 🎮 Gameplay
+
+<p align="center">
+  <img src="assets/screenshot.png" alt="Tanchi Snake gameplay" width="800">
+</p>
 
 > The game is deployed on an Oracle Cloud Always Free VM with Caddy handling HTTPS and reverse proxying.
 
