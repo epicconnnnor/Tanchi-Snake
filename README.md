@@ -1,92 +1,42 @@
-## 🎮 Live Demo
+# Tanchi Snake
 
-**Play Tanchi Snake:**  
-https://tanchi-snake.duckdns.org
+A browser-based multiplayer Snake game with private rooms, real-time play, and an arcade-cabinet interface.
 
+![Tanchi Snake game screen](assets/Tan-chi-snake.png)
 
-# 🐍 Tanchi Snake
+## Play online
 
-<p align="center">
-  <img src="assets/tanchi_sanke_icon.png" alt="Tanchi Snake" width="500">
-</p>
+[Play Tanchi Snake](https://tanchi-snake.duckdns.org)
 
-A real-time multiplayer Snake game built with Java, Spring Boot, and WebSockets.
+## Play locally
 
-## 🎮 Gameplay
+Tanchi Snake runs on Java 21. Clone the repository and start the application:
 
-<p align="center">
-  <img src="assets/Tan-chi-snake.png" alt="Tanchi Snake gameplay" width="800">
-</p>
+```sh
+./mvnw spring-boot:run
+```
 
-> The game is deployed on an Oracle Cloud Always Free VM with Caddy handling HTTPS and reverse proxying.
+On Windows:
 
-## ✨ Features
+```powershell
+.\mvnw.cmd spring-boot:run
+```
 
-- 🎮 Real-time multiplayer gameplay
-- 🌐 Browser-based client
-- 🔌 WebSocket communication
-- 🖥️ Server-authoritative game state
-- 💥 Server-side collision detection
-- 🐍 Multiple snakes in the same game
-- 🎨 Unique player snake colors
-- 🆔 Persistent player identities
-- 🏠 Game/menu navigation
-- ⚡ Low-latency real-time updates
+Open [http://localhost:8080](http://localhost:8080), create a room, and share its four-character code with up to seven other players.
 
-## 🛠️ Tech Stack
+## What you can do
 
-### Backend
-- **Java 21**
-- **Spring Boot**
-- **Spring WebSocket**
-- **Maven**
+- Play a solo round immediately.
+- Create or join a private room for up to eight players.
+- Start and replay rounds from the lobby.
+- Use keyboard arrows or the on-screen controls to steer.
+- Reconnect to a dropped game within the room’s grace period.
 
-### Frontend
-- **HTML**
-- **CSS**
-- **JavaScript**
-- **WebSockets**
+## Documentation
 
-### Deployment
-- **Oracle Cloud Infrastructure**
-- **Ubuntu**
-- **Caddy**
-- **systemd**
-- **DuckDNS**
+- [Installation guide](docs/installation.md) — requirements, running, testing, and common setup problems.
+- [Technical guide](docs/technical-guide.md) — project layout, game flow, WebSocket messages, and architecture.
 
-## 🏗️ Architecture
+## Built with
 
-```text
-                    ┌──────────────────┐
-                    │     Browser      │
-                    │   HTML/CSS/JS    │
-                    └────────┬─────────┘
-                             │
-                       HTTPS / WSS
-                             │
-                             ▼
-                    ┌──────────────────┐
-                    │      Caddy       │
-                    │ Reverse Proxy +  │
-                    │      HTTPS       │
-                    └────────┬─────────┘
-                             │
-                         WebSocket
-                             │
-                             ▼
-                    ┌──────────────────┐
-                    │   Spring Boot    │
-                    │    WebSocket     │
-                    │      Server      │
-                    └────────┬─────────┘
-                             │
-                             ▼
-                    ┌──────────────────┐
-                    │ Authoritative    │
-                    │   Game State     │
-                    │                  │
-                    │ • Movement       │
-                    │ • Collision      │
-                    │ • Players        │
-                    │ • Game Updates   │
-                    └──────────────────┘
+Java 21, Spring Boot, WebSockets, and vanilla HTML, CSS, and JavaScript.

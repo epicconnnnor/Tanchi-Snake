@@ -12,11 +12,13 @@
   // different players, and localStorage is shared across them.
   var STORE_PLAYER = 'tanchi.playerId';
   var STORE_ROOM = 'tanchi.room';
+  var STORE_TOKEN = 'tanchi.reconnectToken';
 
-  function remember(playerId, room) {
+  function remember(playerId, room, token) {
     try {
       sessionStorage.setItem(STORE_PLAYER, playerId);
       sessionStorage.setItem(STORE_ROOM, room);
+      sessionStorage.setItem(STORE_TOKEN, token);
     } catch (ignored) {
       // Private mode and the like. Identity just will not survive a reload.
     }
@@ -34,6 +36,7 @@
     try {
       sessionStorage.removeItem(STORE_PLAYER);
       sessionStorage.removeItem(STORE_ROOM);
+      sessionStorage.removeItem(STORE_TOKEN);
     } catch (ignored) {
       // Nothing to do.
     }
@@ -94,6 +97,7 @@
 
   var socket = null;
   var myPlayerId = recall(STORE_PLAYER);
+  var reconnectToken = recall(STORE_TOKEN);
   var lastState = null;
 
   /*
@@ -154,7 +158,8 @@
 
     if (message.type === 'joined') {
       myPlayerId = message.you;
-      remember(message.you, message.room);
+      reconnectToken = message.token;
+      remember(message.you, message.room, message.token);
       clearBanner();
     } else if (message.type === 'state') {
       lastState = message;
@@ -973,11 +978,11 @@
   buildLogo();
 
   var savedRoom = recall(STORE_ROOM);
-  if (myPlayerId && savedRoom) {
-    // The server needs the room as well as the id to place a returning player.
+  if (myPlayerId && reconnectToken && savedRoom) {
+    // The server needs the room and private reconnect token to restore a seat.
     show('menu');
     connect(function () {
-      send({ type: 'join', room: savedRoom, you: myPlayerId });
+      send({ type: 'join', room: savedRoom, token: reconnectToken });
     });
   } else {
     show('menu');

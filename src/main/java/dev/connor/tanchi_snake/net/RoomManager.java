@@ -110,18 +110,29 @@ public class RoomManager {
      * <p>Never throws on bad input: the failure comes back in the result so the
      * caller can tell the client and carry on.
      */
-    public JoinResult join(String code, String sessionId, String claimedPlayerId, String name) {
+    public JoinResult join(String code, String sessionId, String reconnectToken, String name) {
         Room room = find(code);
         if (room == null) {
             return JoinResult.failed(JoinResult.Failure.NO_SUCH_ROOM);
         }
 
-        Player returning = claimedPlayerId == null ? null : room.player(claimedPlayerId);
+        String existingPlayerId = playerBySession.get(sessionId);
+        if (existingPlayerId != null) {
+            Room existingRoom = roomOfPlayer(existingPlayerId);
+            Player existingPlayer = existingRoom == null ? null : existingRoom.player(existingPlayerId);
+            if (existingRoom == room && existingPlayer != null
+                    && reconnectToken != null && reconnectToken.equals(existingPlayer.reconnectToken())) {
+                return JoinResult.rejoined(room, existingPlayer);
+            }
+            return JoinResult.failed(JoinResult.Failure.ALREADY_IN_ROOM);
+        }
+
+        Player returning = room.playerByReconnectToken(reconnectToken);
         if (returning != null) {
-            room.markConnected(claimedPlayerId, sessionId);
+            room.markConnected(returning.playerId(), sessionId);
             // The snake is keyed by playerId, so it is still theirs.
-            room.resumeSnake(claimedPlayerId);
-            bind(sessionId, claimedPlayerId, room.code());
+            room.resumeSnake(returning.playerId());
+            bind(sessionId, returning.playerId(), room.code());
             return JoinResult.rejoined(room, returning);
         }
 
@@ -129,7 +140,7 @@ public class RoomManager {
             return JoinResult.failed(JoinResult.Failure.ROOM_FULL);
         }
 
-        Player seated = room.add(new Player(newPlayerId(), sessionId, names.normalise(name)));
+        Player seated = room.add(new Player(newPlayerId(), sessionId, names.normalise(name), newReconnectToken()));
         bind(sessionId, seated.playerId(), room.code());
         // Joining mid-round puts them straight on the board at level 1, with
         // no grace period.
@@ -140,6 +151,10 @@ public class RoomManager {
     }
 
     private String newPlayerId() {
+        return UUID.randomUUID().toString();
+    }
+
+    private String newReconnectToken() {
         return UUID.randomUUID().toString();
     }
 

@@ -11,7 +11,8 @@ public record JoinResult(Room room, Player player, boolean rejoined, Failure fai
 
     public enum Failure {
         NO_SUCH_ROOM,
-        ROOM_FULL
+        ROOM_FULL,
+        ALREADY_IN_ROOM
     }
 
     public static JoinResult joined(Room room, Player player) {
