@@ -4,6 +4,10 @@ A browser-based multiplayer Snake game with private rooms, real-time play, and a
 
 ![Tanchi Snake game screen](assets/Tan-chi-snake.png)
 
+## Play online
+
+[Play Tanchi Snake](https://tanchi-snake.duckdns.org)
+
 ## Play locally
 
 Tanchi Snake runs on Java 21. Clone the repository and start the application:
