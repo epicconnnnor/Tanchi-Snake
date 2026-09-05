@@ -6,7 +6,7 @@ A browser-based multiplayer Snake game with private rooms, real-time play, and a
 
 ## 🎮 Play online
 
-[Play Tanchi Snake](https://tanchi-snake.duckdns.org)
+[Play Tanchi Snake](https://tanchisnake.connorchen.dev)
 
 ## 💻 Play locally
 
