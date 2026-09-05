@@ -76,7 +76,7 @@ public class GameLoop {
                                 rooms.join(room.code(), c.sessionId(), null, c.name()));
                     }
                     case JOIN -> replyToJoin(c.sessionId(), rooms.join(
-                            c.roomCode(), c.sessionId(), c.claimedPlayerId(), c.name()));
+                            c.roomCode(), c.sessionId(), c.reconnectToken(), c.name()));
                     case LEAVE -> rooms.leave(c.sessionId());
                     case DISCONNECT -> rooms.disconnect(c.sessionId());
                     default -> {
@@ -99,11 +99,13 @@ public class GameLoop {
             sockets.send(sessionId, "{\"type\":\"joined\",\"room\":\""
                     + result.room().code() + "\",\"you\":\""
                     + result.player().playerId() + "\",\"rejoined\":"
-                    + result.rejoined() + "}");
+                    + result.rejoined() + ",\"token\":\""
+                    + result.player().reconnectToken() + "\"}");
         } else {
             sockets.send(sessionId, switch (result.failure()) {
                 case NO_SUCH_ROOM -> "{\"type\":\"error\",\"message\":\"no such room\"}";
                 case ROOM_FULL -> "{\"type\":\"error\",\"message\":\"room is full\"}";
+                case ALREADY_IN_ROOM -> "{\"type\":\"error\",\"message\":\"leave the current room first\"}";
             });
         }
     }

@@ -11,6 +11,7 @@ package dev.connor.tanchi_snake.room;
 public class Player {
 
     private final String playerId;
+    private final String reconnectToken;
     private String sessionId;
     private String name;
     private boolean ready;
@@ -24,9 +25,14 @@ public class Player {
     public static final int UNASSIGNED = -1;
 
     public Player(String playerId, String sessionId, String name) {
+        this(playerId, sessionId, name, java.util.UUID.randomUUID().toString());
+    }
+
+    public Player(String playerId, String sessionId, String name, String reconnectToken) {
         this.playerId = playerId;
         this.sessionId = sessionId;
         this.name = name;
+        this.reconnectToken = reconnectToken;
         this.ready = false;
         this.connected = true;
     }
@@ -46,6 +52,11 @@ public class Player {
     /** Stable for as long as the player holds the seat. Keys their snake. */
     public String playerId() {
         return playerId;
+    }
+
+    /** Secret presented by the owner to reclaim this seat after a disconnect. */
+    public String reconnectToken() {
+        return reconnectToken;
     }
 
     /** The socket they are on now, or the last one they were on. */

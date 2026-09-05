@@ -158,12 +158,42 @@ class RoomManagerTest {
         assertFalse(room.player(was).isConnected());
         assertEquals(1_000, room.player(was).disconnectedAtMillis());
 
-        JoinResult back = rm.join(room.code(), "s1-again", was, "Ann");
+        JoinResult back = rm.join(room.code(), "s1-again", room.player(was).reconnectToken(), "Ann");
         assertTrue(back.ok());
         assertTrue(back.rejoined());
         assertTrue(room.player(was).isConnected());
         assertEquals(1, room.size());
         assertEquals("s1-again", room.player(was).sessionId(), "rebound to the new socket");
+    }
+
+    @Test
+    void aPublicPlayerIdCannotReclaimSomeoneElsesSeat() {
+        RoomManager rm = manager(new TestClock(0));
+        Room room = rm.create();
+        String hostId = rm.join(room.code(), "host", null, "Ann").player().playerId();
+
+        rm.disconnect("host");
+        JoinResult attacker = rm.join(room.code(), "attacker", hostId, "Eve");
+
+        assertTrue(attacker.ok());
+        assertFalse(attacker.rejoined());
+        assertNotEquals(hostId, attacker.player().playerId());
+        assertEquals(2, room.size());
+    }
+
+    @Test
+    void aConnectedSessionCannotJoinAnotherRoomAndLeaveAGhostSeat() {
+        RoomManager rm = manager(new TestClock(0));
+        Room first = rm.create();
+        Room second = rm.create();
+        rm.join(first.code(), "s1", null, "Ann");
+
+        JoinResult attempt = rm.join(second.code(), "s1", null, "Ann");
+
+        assertFalse(attempt.ok());
+        assertEquals(JoinResult.Failure.ALREADY_IN_ROOM, attempt.failure());
+        assertEquals(1, first.size());
+        assertEquals(0, second.size());
     }
 
     // --- host reassignment ---
@@ -229,7 +259,7 @@ class RoomManagerTest {
         rm.disconnect("s1");
         assertNull(room.hostPlayerId());
 
-        rm.join(room.code(), "s1-again", was, "Ann");
+        rm.join(room.code(), "s1-again", room.player(was).reconnectToken(), "Ann");
 
         assertTrue(room.isHost(was));
     }
@@ -290,7 +320,7 @@ class RoomManagerTest {
         rm.disconnect("s1");
 
         clock.advance(Room.EMPTY_TTL_MILLIS - 1);
-        rm.join(room.code(), "s1-again", pid(room, "s1"), "Ann");
+        rm.join(room.code(), "s1-again", room.player(pid(room, "s1")).reconnectToken(), "Ann");
         clock.advance(Room.EMPTY_TTL_MILLIS * 5);
 
         assertTrue(rm.sweepEmptyRooms().isEmpty());

@@ -119,6 +119,19 @@ public class Room {
         return players.get(playerId);
     }
 
+    /** Finds a seat by its private reconnect credential. */
+    public Player playerByReconnectToken(String reconnectToken) {
+        if (reconnectToken == null) {
+            return null;
+        }
+        for (Player p : players.values()) {
+            if (reconnectToken.equals(p.reconnectToken())) {
+                return p;
+            }
+        }
+        return null;
+    }
+
     /** Finds the seat currently bound to a socket, or null. */
     public Player playerBySession(String sessionId) {
         for (Player p : players.values()) {

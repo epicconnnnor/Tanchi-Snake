@@ -53,6 +53,8 @@ class WebSocketEndToEndTest {
         private WebSocketSession session;
         /** The stable id the server gave us; keys our snake on the board. */
         private String playerId;
+        /** Credential required to reclaim the seat after reconnecting. */
+        private String reconnectToken;
 
         @Override
         protected void handleTextMessage(WebSocketSession session, TextMessage message) {
@@ -148,10 +150,10 @@ class WebSocketEndToEndTest {
         return codeFromJoined(client);
     }
 
-    /** Rejoins claiming a previously issued id, the way a returning client would. */
-    private String rejoinRoom(Client client, String code, String playerId) throws Exception {
+    /** Rejoins using the private credential issued on the original join. */
+    private String rejoinRoom(Client client, String code, String reconnectToken) throws Exception {
         client.send("{\"type\":\"join\",\"room\":\"" + code
-                + "\",\"you\":\"" + playerId + "\"}");
+                + "\",\"token\":\"" + reconnectToken + "\"}");
         return codeFromJoined(client);
     }
 
@@ -163,6 +165,9 @@ class WebSocketEndToEndTest {
         Object you = fields.get("you");
         assertInstanceOf(String.class, you, "joined carried no player id: " + joined);
         client.playerId = (String) you;
+        Object token = fields.get("token");
+        assertInstanceOf(String.class, token, "joined carried no reconnect token: " + joined);
+        client.reconnectToken = (String) token;
         return (String) fields.get("room");
     }
 
@@ -466,10 +471,12 @@ class WebSocketEndToEndTest {
         Client host = connect();
         String code;
         String originalId;
+        String reconnectToken;
         StateMessage before;
         try {
             code = createRoom(host, "Ann");
             originalId = host.playerId;
+            reconnectToken = host.reconnectToken;
             host.send("{\"type\":\"start\"}");
             before = host.awaitState(s -> "RUNNING".equals(s.phase()) && mySnake(s, host) != null);
             assertNotNull(before);
@@ -477,10 +484,10 @@ class WebSocketEndToEndTest {
             host.close();
         }
 
-        // A new socket means a new session id, so the seat can only be found
-        // by the id the client was given.
+        // A new socket means a new session id, so the credential is required
+        // to find the existing seat.
         try (Client returning = connect()) {
-            assertEquals(code, rejoinRoom(returning, code, originalId));
+            assertEquals(code, rejoinRoom(returning, code, reconnectToken));
 
             assertEquals(originalId, returning.playerId, "same seat, same id");
             StateMessage after = returning.awaitState(s -> mySnake(s, returning) != null);
@@ -491,14 +498,14 @@ class WebSocketEndToEndTest {
     }
 
     @Test
-    void claimingAnUnknownIdSeatsYouAsANewcomer() throws Exception {
+    void presentingAnUnknownReconnectTokenSeatsYouAsANewcomer() throws Exception {
         try (Client host = connect(); Client stranger = connect()) {
             String code = createRoom(host, "Ann");
 
-            assertEquals(code, rejoinRoom(stranger, code, "not-a-real-player-id"));
+            assertEquals(code, rejoinRoom(stranger, code, "not-a-real-token"));
 
             assertNotNull(stranger.playerId);
-            assertNotEquals("not-a-real-player-id", stranger.playerId, "bogus ids are not honoured");
+            assertNotEquals("not-a-real-token", stranger.playerId, "bogus tokens are not honoured");
             assertNotEquals(host.playerId, stranger.playerId);
             assertNotNull(host.awaitState(s -> s.players().size() == 2));
         }
@@ -612,13 +619,14 @@ class WebSocketEndToEndTest {
             joinRoom(guest, code, "Bo");
             assertNotNull(host.awaitState(s -> s.players().size() == 2));
             String oldId = guest.playerId;
+            String oldToken = guest.reconnectToken;
 
             guest.send("{\"type\":\"leave\"}");
             assertNotNull(host.awaitState(s -> s.players().size() == 1));
 
-            // The old id is spent: claiming it must not hand back the seat.
+            // The old credential is spent: it must not hand back the seat.
             try (Client returning = connect()) {
-                rejoinRoom(returning, code, oldId);
+                rejoinRoom(returning, code, oldToken);
                 assertNotEquals(oldId, returning.playerId,
                         "a left seat was handed back to a stale id");
 

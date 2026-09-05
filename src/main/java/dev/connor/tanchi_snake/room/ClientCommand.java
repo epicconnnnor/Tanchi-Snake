@@ -13,7 +13,7 @@ public record ClientCommand(
         Type type,
         String roomCode,
         String name,
-        String claimedPlayerId,
+        String reconnectToken,
         Direction direction) {
 
     public enum Type {
@@ -36,10 +36,10 @@ public record ClientCommand(
         return join(sessionId, roomCode, name, null);
     }
 
-    /** A returning client sends back the playerId it was given on joining. */
+    /** A returning client presents the secret issued when it first joined. */
     public static ClientCommand join(String sessionId, String roomCode, String name,
-            String claimedPlayerId) {
-        return new ClientCommand(sessionId, Type.JOIN, roomCode, name, claimedPlayerId, null);
+            String reconnectToken) {
+        return new ClientCommand(sessionId, Type.JOIN, roomCode, name, reconnectToken, null);
     }
 
     public static ClientCommand rename(String sessionId, String name) {
